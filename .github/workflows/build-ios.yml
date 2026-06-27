@@ -27,7 +27,7 @@ jobs:
       - name: Install CocoaPods
         run: sudo gem install cocoapods
 
-      - name: Create www directory and copy assets
+      - name: Prepare www directory
         run: |
           mkdir -p www/icons www/js
           cp index.html www/
@@ -37,128 +37,58 @@ jobs:
           cp icon.svg www/
           cp -r js/* www/js/
           [ -d icons ] && cp -r icons/* www/icons/ || true
-          [ -f install-guide.html ] && cp install-guide.html www/ || true
-          echo "www/ contents:"
+          echo "www/ ready"
           ls www/
 
-      - name: Add iOS platform (force recreate)
+      - name: Add iOS platform
         run: |
           rm -rf ios
           npx cap add ios
-          echo "ios/ exists?"
-          ls ios/ | head -20
-          echo "App dir?"
-          ls ios/App/ 2>/dev/null || echo "No App dir"
+          ls ios/App/
 
-      - name: Sync web assets to iOS
-        run: npx cap sync ios 2>&1 || echo "Sync had warnings, continuing..."
+      - name: Sync web assets
+        run: npx cap sync ios
 
-      - name: Check for Podfile and fix
+      - name: Copy Podfile from template
         run: |
-          if [ ! -f ios/App/Podfile ]; then
-            echo "⚠️ No Podfile found, creating one..."
-            cat > ios/App/Podfile <<'PODFILE'
-            # Uncomment the next line to define a global platform for your project
-            # platform :ios, '13.0'
-            
-            target 'App' do
-              use_frameworks!
-            
-              pod 'Capacitor', :path => '../node_modules/@capacitor/ios'
-              pod 'CapacitorCordova', :path => '../node_modules/@capacitor/ios'
-            end
-            
-            post_install do |installer|
-              installer.pods_project.targets.each do |target|
-                target.build_configurations.each do |config|
-                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
-                end
-              end
-            end
-            PODFILE
-            echo "Podfile created"
-          fi
+          cp Podfile.template ios/App/Podfile
+          echo "Podfile copied:"
           cat ios/App/Podfile | head -15
 
       - name: Install pods
-        run: cd ios/App && pod install --repo-update 2>&1 | tail -10
+        run: cd ios/App && pod install --repo-update 2>&1 | tail -15
 
-      - name: Create self-signed certificate for ad-hoc build
-        run: |
-          security create-keychain -p "temp123" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "temp123" build.keychain
-          
-          openssl genrsa -out /tmp/key.pem 2048
-          openssl req -new -key /tmp/key.pem -out /tmp/csr.csr -subj "/CN=Memoday/CN=US"
-          openssl x509 -req -days 365 -in /tmp/csr.csr -signkey /tmp/key.pem -out /tmp/cert.pem
-          openssl pkcs12 -export -out /tmp/cert.p12 -inkey /tmp/key.pem -in /tmp/cert.pem -passout pass:temp123
-          
-          security import /tmp/cert.p2 -k build.keychain -P temp123 -A 2>/dev/null || true
-
-      - name: Build Archive
-        run: |
-          cd ios/App
-          
+      - name: Build (no signing)
+        run: cd ios/App && \
           xcodebuild \
             -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
             -sdk iphoneos \
-            -archivePath ../build/App.xcarchive \
-            CODE_SIGN_IDENTITY="Apple Development" \
-            CODE_SIGNING_REQUIRED=YES \
-            CODE_SIGNING_ALLOWED=YES \
-            DEVELOPMENT_TEAM="" \
-            PROVISIONING_PROFILE="" \
-            OTHER_CODE_SIGN_FLAGS="--keychain build.keychain" \
-            archive 2>&1 | tail -40
-          
-          echo "=== Checking archive ==="
-          find ../build -type f 2>/dev/null | head -20 || echo "No build output"
-          find . -name "*.xcarchive" -o -name "*.app" 2>/dev/null | head -5 || echo "No archives found"
+            -derivedDataPath ../build/DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            build 2>&1 | tail -40
 
-      - name: Export IPA
+      - name: Package IPA
         run: |
-          mkdir -p ios/build/ipa/Payload
-          
-          APP_PATH=$(find ios/build -name "*.app" -not -path "*dSYM*" 2>/dev/null | head -1)
+          APP_PATH=$(find ios/build/DerivedData -name "App.app" 2>/dev/null | head -1)
           
           if [ -z "$APP_PATH" ]; then
-            echo "Trying alternate paths..."
-            APP_PATH=$(find ios -name "App.app" -not -path "*DerivedData*" 2>/dev/null | head -1)
+            echo "Searching for any .app ..."
+            find ios/build -name "*.app" 2>/dev/null || find ios -name "App.app" 2>/dev/null || echo "No app found!"
           fi
           
-          if [ -z "$APP_PATH" ]; then
-            echo "No app found, trying to build with xcodebuild directly to ipa..."
-            cd ios/App
-            xcodebuild \
-              -workspace App.xcworkspace \
-              -scheme App \
-              -configuration Release \
-              -sdk iphoneos \
-              -derivedDataPath build/DerivedData \
-              CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGNING_REQUIRED=NO \
-              ONLY_ACTIVE_ARCH=NO \
-              build 2>&1 | tail -30
-            
-            APP_PATH=$(find build/DerivedData -name "App.app" 2>/dev/null | head -1)
-          fi
+          echo "Using: $APP_PATH"
           
-          if [ -n "$APP_PATH" ]; then
-            echo "Found app at: $APP_PATH"
-            cp -r "$APP_PATH" ios/build/ipa/Payload/
-            cd ios/build/ipa && zip -r ../../Memoday.ipa Payload/
-            cd ../../..
-            ls -la Memoday.ipa
-          else
-            echo "ERROR: Could not find built .app file"
-            find ios -name "*.app" -not -path "*DerivedData*" 2>/dev/null || echo "No apps anywhere"
-            exit 1
-          fi
+          mkdir -p Payload
+          cp -r "$APP_PATH" Payload/
+          zip -r Memoday.ipa Payload/
+          ls -lh Memoday.ipa
 
-      - name: Upload IPA as Artifact
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: Memoday-iOS-IPA
