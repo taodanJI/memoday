@@ -1,7 +1,7 @@
 name: Build iOS IPA for Sideloadly
 
 on:
-  workflow_dispatch:   # 手动按钮触发
+  workflow_dispatch:
   push:
     branches: [ master, main ]
 
@@ -20,117 +20,148 @@ jobs:
           node-version: '22'
 
       - name: Install npm dependencies
-        run: npm ci --ignore-scripts
+        run: |
+          rm -rf node_modules
+          npm install --ignore-scripts
 
-      - name: Install Capacitor iOS platform
-        run: npx cap add ios || echo "iOS platform already exists"
+      - name: Install CocoaPods
+        run: sudo gem install cocoapods
+
+      - name: Create www directory and copy assets
+        run: |
+          mkdir -p www/icons www/js
+          cp index.html www/
+          cp style.css www/
+          cp manifest.json www/
+          cp sw.js www/
+          cp icon.svg www/
+          cp -r js/* www/js/
+          [ -d icons ] && cp -r icons/* www/icons/ || true
+          [ -f install-guide.html ] && cp install-guide.html www/ || true
+          echo "www/ contents:"
+          ls www/
+
+      - name: Add iOS platform (force recreate)
+        run: |
+          rm -rf ios
+          npx cap add ios
+          echo "ios/ exists?"
+          ls ios/ | head -20
+          echo "App dir?"
+          ls ios/App/ 2>/dev/null || echo "No App dir"
 
       - name: Sync web assets to iOS
-        run: npx cap sync ios
+        run: npx cap sync ios 2>&1 || echo "Sync had warnings, continuing..."
 
-      - name: Install CocoaPods pods
-        run: cd ios/App && pod install --repo-update
-
-      - name: Create ad-hoc signing certificate (self-signed)
+      - name: Check for Podfile and fix
         run: |
-          # 创建临时自签名证书，仅用于生成 IPA 结构
-          # Sideloadly 会重新签名，所以这个证书不重要
-          security create-keychain -p "temp" build.keychain
+          if [ ! -f ios/App/Podfile ]; then
+            echo "⚠️ No Podfile found, creating one..."
+            cat > ios/App/Podfile <<'PODFILE'
+            # Uncomment the next line to define a global platform for your project
+            # platform :ios, '13.0'
+            
+            target 'App' do
+              use_frameworks!
+            
+              pod 'Capacitor', :path => '../node_modules/@capacitor/ios'
+              pod 'CapacitorCordova', :path => '../node_modules/@capacitor/ios'
+            end
+            
+            post_install do |installer|
+              installer.pods_project.targets.each do |target|
+                target.build_configurations.each do |config|
+                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+                end
+              end
+            end
+            PODFILE
+            echo "Podfile created"
+          fi
+          cat ios/App/Podfile | head -15
+
+      - name: Install pods
+        run: cd ios/App && pod install --repo-update 2>&1 | tail -10
+
+      - name: Create self-signed certificate for ad-hoc build
+        run: |
+          security create-keychain -p "temp123" build.keychain
           security default-keychain -s build.keychain
-          security unlock-keychain -p "temp" build.keychain
-          security set-keychain-settings -t 3600 -u build.keychain
+          security unlock-keychain -p "temp123" build.keychain
+          
+          openssl genrsa -out /tmp/key.pem 2048
+          openssl req -new -key /tmp/key.pem -out /tmp/csr.csr -subj "/CN=Memoday/CN=US"
+          openssl x509 -req -days 365 -in /tmp/csr.csr -signkey /tmp/key.pem -out /tmp/cert.pem
+          openssl pkcs12 -export -out /tmp/cert.p12 -inkey /tmp/key.pem -in /tmp/cert.pem -passout pass:temp123
+          
+          security import /tmp/cert.p2 -k build.keychain -P temp123 -A 2>/dev/null || true
 
-          # 创建自签名证书
-          cat > cert.conf <<EOF
-          [req]
-          distinguished_name = req_distinguished_name
-          [req_distinguished_name]
-          CN = Memoday Build
-          EOF
-
-          openssl genrsa -out key.pem 2048
-          openssl req -new -key key.pem -out cert.csr -config cert.conf
-          openssl x509 -req -days 365 -in cert.csr -signkey key.pem -out cert.pem
-          openssl pkcs12 -export -out cert.p12 -inkey key.pem -in cert.pem -passout pass:temp123
-
-          security import cert.p12 -k build.keychain -P temp123 -A
-          security find-identity -v
-
-      - name: Patch Xcode project to use ad-hoc signing
+      - name: Build Archive
         run: |
           cd ios/App
-          # 修改项目设置，使用 ad-hoc 签名
-          /usr/libexec/PlistBuddy -c "Add :CODE_SIGN_IDENTITY string 'iPhone Developer'" App/Info.plist 2>/dev/null || true
-
-      - name: Build and Archive
-        run: |
-          cd ios/App
+          
           xcodebuild \
             -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
             -sdk iphoneos \
-            -archivePath build/App.xcarchive \
-            -allowProvisioningUpdates \
-            CODE_SIGN_IDENTITY="iPhone Developer" \
+            -archivePath ../build/App.xcarchive \
+            CODE_SIGN_IDENTITY="Apple Development" \
             CODE_SIGNING_REQUIRED=YES \
             CODE_SIGNING_ALLOWED=YES \
             DEVELOPMENT_TEAM="" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
-            archive 2>&1 | tail -50
+            PROVISIONING_PROFILE="" \
+            OTHER_CODE_SIGN_FLAGS="--keychain build.keychain" \
+            archive 2>&1 | tail -40
+          
+          echo "=== Checking archive ==="
+          find ../build -type f 2>/dev/null | head -20 || echo "No build output"
+          find . -name "*.xcarchive" -o -name "*.app" 2>/dev/null | head -5 || echo "No archives found"
 
-          echo "=== Archive contents ==="
-          find build/App.xcarchive/Products -name "*.app" || echo "No .app found"
-
-      - name: Export unsigned IPA
+      - name: Export IPA
         run: |
-          cd ios/App
-
-          # 创建 export options（ad-hoc）
-          cat > ExportOptions.plist <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>method</key>
-              <string>ad-hoc</string>
-              <key>signingStyle</key>
-              <string>automatic</string>
-              <key>compileBitcode</key>
-              <false/>
-          </dict>
-          </plist>
-          EOF
-
-          # 尝试导出（如果上面的 archive 成功）
-          xcodebuild -exportArchive \
-            -archivePath build/App.xcarchive \
-            -exportOptionsPlist ExportOptions.plist \
-            -exportPath build/ipa \
-            -allowProvisioningUpdates 2>&1 | tail -30 || echo "Export failed, trying manual IPA creation..."
-
-          # 如果导出失败，手动创建 IPA（Sideloadly 可以重新签名）
-          if [ ! -f build/ipa/*.ipa ]; then
-            echo "Creating unsigned IPA manually..."
-            APP_PATH=$(find build/App.xcarchive/Products/Applications -name "*.app" | head -1)
-            if [ -z "$APP_PATH" ]; then
-              echo "ERROR: No .app found in archive"
-              exit 1
-            fi
-            mkdir -p build/ipa/Payload
-            cp -r "$APP_PATH" build/ipa/Payload/
-            cd build/ipa && zip -r ../../Memoday.ipa Payload/ && cd ../../..
-            echo "Unsigned IPA created at ios/App/Memoday.ipa"
-            ls -la ios/App/Memoday.ipa
+          mkdir -p ios/build/ipa/Payload
+          
+          APP_PATH=$(find ios/build -name "*.app" -not -path "*dSYM*" 2>/dev/null | head -1)
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "Trying alternate paths..."
+            APP_PATH=$(find ios -name "App.app" -not -path "*DerivedData*" 2>/dev/null | head -1)
+          fi
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "No app found, trying to build with xcodebuild directly to ipa..."
+            cd ios/App
+            xcodebuild \
+              -workspace App.xcworkspace \
+              -scheme App \
+              -configuration Release \
+              -sdk iphoneos \
+              -derivedDataPath build/DerivedData \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              ONLY_ACTIVE_ARCH=NO \
+              build 2>&1 | tail -30
+            
+            APP_PATH=$(find build/DerivedData -name "App.app" 2>/dev/null | head -1)
+          fi
+          
+          if [ -n "$APP_PATH" ]; then
+            echo "Found app at: $APP_PATH"
+            cp -r "$APP_PATH" ios/build/ipa/Payload/
+            cd ios/build/ipa && zip -r ../../Memoday.ipa Payload/
+            cd ../../..
+            ls -la Memoday.ipa
           else
-            echo "IPA exported successfully"
-            ls -la build/ipa/
+            echo "ERROR: Could not find built .app file"
+            find ios -name "*.app" -not -path "*DerivedData*" 2>/dev/null || echo "No apps anywhere"
+            exit 1
           fi
 
       - name: Upload IPA as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Memoday-iOS-IPA
-          path: ios/App/Memoday.ipa
+          path: Memoday.ipa
           retention-days: 30
           if-no-files-found: warn
