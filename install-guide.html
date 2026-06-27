@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>手机安装指南 - 念念日历</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #0F0F1A;
+      color: #F1F1F5;
+      line-height: 1.7;
+      padding: 0;
+    }
+    .header {
+      background: linear-gradient(135deg, #7C3AED 0%, #EC4899 100%);
+      padding: 48px 20px 40px;
+      text-align: center;
+    }
+    .header h1 { font-size: 28px; font-weight: 800; }
+    .header p { font-size: 15px; opacity: 0.9; margin-top: 8px; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px 20px 60px; }
+    .section {
+      background: #1E1E2E;
+      border-radius: 16px;
+      padding: 24px 20px;
+      margin-bottom: 20px;
+    }
+    .section h2 {
+      font-size: 20px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section h3 {
+      font-size: 16px;
+      margin: 20px 0 10px;
+      color: #A78BFA;
+    }
+    .step {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 16px;
+      align-items: flex-start;
+    }
+    .step-num {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #7C3AED, #EC4899);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .step-content { flex: 1; font-size: 15px; color: #D1D5DB; }
+    .step-content strong { color: #F1F1F5; }
+    .note {
+      background: rgba(124, 58, 237, 0.15);
+      border-left: 3px solid #7C3AED;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      margin: 12px 0;
+      color: #C4B5FD;
+    }
+    .warn {
+      background: rgba(245, 158, 11, 0.15);
+      border-left: 3px solid #F59E0B;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      margin: 12px 0;
+      color: #FCD34D;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .tab {
+      flex: 1;
+      padding: 12px;
+      text-align: center;
+      border-radius: 12px;
+      background: #1E1E2E;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+      transition: all 0.2s;
+      border: 2px solid transparent;
+    }
+    .tab.active {
+      background: linear-gradient(135deg, #7C3AED, #EC4899);
+      border-color: transparent;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeIn 0.3s; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .icon-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .icon-item {
+      background: #2D2D3F;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      font-size: 13px;
+    }
+    .icon-item .emoji { font-size: 32px; display: block; margin-bottom: 6px; }
+    .back-link {
+      display: inline-block;
+      margin-top: 20px;
+      color: #A78BFA;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .feature-list { list-style: none; }
+    .feature-list li {
+      padding: 8px 0;
+      padding-left: 24px;
+      position: relative;
+      font-size: 14px;
+      color: #D1D5DB;
+    }
+    .feature-list li::before {
+      content: '✓';
+      position: absolute;
+      left: 0;
+      color: #10B981;
+      font-weight: 700;
+    }
+    code {
+      background: #2D2D3F;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #FCD34D;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>📱 手机安装指南</h1>
+    <p>把念念日历装到手机桌面，像原生 App 一样使用</p>
+  </div>
+
+  <div class="container">
+    <!-- 方案选择 -->
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('pwa')">🚀 快速安装（推荐）</div>
+      <div class="tab" onclick="switchTab('native')">📦 打包成原生App</div>
+    </div>
+
+    <!-- 方案1：PWA 快速安装 -->
+    <div class="tab-content active" id="tab-pwa">
+      <div class="section">
+        <h2>🚀 PWA 安装到手机桌面</h2>
+        <p style="color:#9CA3AF;font-size:14px;margin-bottom:16px">
+          PWA（渐进式 Web 应用）可以直接安装到手机桌面，无需应用商店，无需下载安装包。<br>
+          安装后像原生 App 一样全屏运行，支持离线使用和消息通知。
+        </p>
+
+        <div class="icon-grid">
+          <div class="icon-item"><span class="emoji">✅</span>无需应用商店</div>
+          <div class="icon-item"><span class="emoji">✅</span>免费安装</div>
+          <div class="icon-item"><span class="emoji">✅</span>支持离线</div>
+          <div class="icon-item"><span class="emoji">✅</span>支持通知</div>
+        </div>
+      </div>
+
+      <!-- 安卓 -->
+      <div class="section">
+        <h2>🤖 安卓手机安装</h2>
+
+        <h3>方法一：Chrome 浏览器（推荐）</h3>
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">用 <strong>Chrome 浏览器</strong>打开念念日历网址</div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">点击浏览器右上角 <strong>⋮（三个点菜单）</strong></div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">找到 <strong>"添加到主屏幕"</strong> 或 <strong>"安装应用"</strong></div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">点击确认，桌面就会出现 <strong>念念日历图标</strong></div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-content">点击图标即可全屏使用，和原生 App 一样</div>
+        </div>
+
+        <div class="note">
+          💡 部分安卓手机（华为、小米、OPPO）自带浏览器也支持，步骤类似：菜单 → 添加到桌面/安装应用
+        </div>
+
+        <h3>方法二：Edge 浏览器</h3>
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">用 Edge 打开网址 → 菜单 <strong>⋮</strong> → <strong>添加到手机</strong> → <strong>安装</strong></div>
+        </div>
+      </div>
+
+      <!-- iPhone -->
+      <div class="section">
+        <h2>🍎 iPhone 安装</h2>
+        <div class="warn">
+          ⚠️ iPhone <strong>必须用 Safari 浏览器</strong>打开，Chrome/微信内置浏览器不支持安装 PWA
+        </div>
+
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">用 <strong>Safari 浏览器</strong>打开念念日历网址</div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">点击底部 <strong>分享按钮（方框+向上箭头 ↑）</strong></div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">在弹出的菜单中找到 <strong>"添加到主屏幕"</strong></div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">点击右上角 <strong>"添加"</strong></div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-content">桌面出现念念日历图标，点击即可全屏使用</div>
+        </div>
+
+        <div class="note">
+          💡 iOS 上的 PWA 通知功能需要 iOS 16.4+ 系统，且需要从桌面图标打开（不是 Safari 内）
+        </div>
+      </div>
+
+      <!-- 通知开启 -->
+      <div class="section">
+        <h2>🔔 开启通知提醒</h2>
+        <p style="color:#9CA3AF;font-size:14px;margin-bottom:16px">
+          安装到桌面后，还需要开启通知权限，才能在纪念日前一天收到提醒
+        </p>
+
+        <h3>安卓</h3>
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">从桌面打开念念日历 → 进入 <strong>"我的"</strong> 页面</div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">点击 <strong>"通知提醒"</strong> 开关 → 浏览器会弹出权限请求</div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">选择 <strong>"允许"</strong> → 完成！</div>
+        </div>
+
+        <h3>iPhone（iOS 16.4+）</h3>
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">从 <strong>桌面图标</strong>打开（不是 Safari）→ 进入"我的"</div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">点击 <strong>"通知提醒"</strong> → 系统弹出权限请求 → <strong>允许</strong></div>
+        </div>
+        <div class="note">
+          💡 iPhone 需要从桌面图标打开才支持通知，Safari 内打开不支持
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>📋 PWA 功能清单</h2>
+        <ul class="feature-list">
+          <li>全屏运行，隐藏浏览器地址栏</li>
+          <li>桌面图标，点击直接打开</li>
+          <li>离线使用，没有网络也能查看已保存的事件</li>
+          <li>消息通知，纪念日前一天弹窗提醒</li>
+          <li>数据存储在手机本地，隐私安全</li>
+          <li>支持安卓和 iPhone 跨平台使用</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 方案2：打包成原生App -->
+    <div class="tab-content" id="tab-native">
+      <div class="section">
+        <h2>📦 打包成原生 App（APK/IPA）</h2>
+        <p style="color:#9CA3AF;font-size:14px;margin-bottom:16px">
+          如果需要生成真正的安装包（.apk 安卓 / .ipa 苹果），可以使用以下工具将 PWA 包装成原生应用
+        </p>
+
+        <h3>方案一：PWABuilder（最简单）</h3>
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">打开 <strong>https://www.pwabuilder.com</strong></div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">输入念念日历的网址 → 点击 <strong>Start</strong></div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">系统会自动分析 → 点击 <strong>Package For Stores</strong></div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">选择 <strong>Android</strong> → 下载生成的 <strong>.apk</strong> 文件</div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-content">将 .apk 传到手机安装即可</div>
+        </div>
+        <div class="note">
+          💡 PWABuilder 生成安卓 APK 是免费的，苹果 IPA 需要苹果开发者账号（$99/年）
+        </div>
+
+        <h3>方案二：Capacitor（代码打包）</h3>
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">安装 Node.js 和 Capacitor</div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            运行命令：<br>
+            <code>npm install @capacitor/core @capacitor/cli</code><br>
+            <code>npx cap init 念念日历 com.memoday.app</code><br>
+            <code>npx cap add android</code><br>
+            <code>npx cap add ios</code><br>
+            <code>npx cap open android</code>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">在 Android Studio 中点击 <strong>Build → Build APK</strong></div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">生成的 APK 在 <code>app/build/outputs/apk/</code> 目录</div>
+        </div>
+
+        <h3>方案三：Bubblewrap（Google 官方工具）</h3>
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <code>npm install -g @bubblewrap/cli</code><br>
+            <code>bubblewrap init --manifest=https://你的网址/manifest.json</code><br>
+            <code>bubblewrap build</code>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">生成的 APK 直接可以安装到安卓手机</div>
+        </div>
+
+        <div class="warn">
+          ⚠️ 苹果 IPA 打包必须有苹果开发者账号（$99/年），且需要 Mac 电脑和 Xcode。安卓 APK 打包完全免费。
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>📊 两种方案对比</h2>
+        <div class="icon-grid" style="grid-template-columns:1fr;">
+          <div class="icon-item" style="text-align:left;">
+            <strong style="color:#A78BFA;">🚀 PWA 安装</strong><br>
+            ✅ 免费、无需打包<br>
+            ✅ 安卓+iPhone 都支持<br>
+            ✅ 更新即时（改代码自动生效）<br>
+            ❌ 需要用浏览器打开再安装<br>
+            ❌ iPhone 通知需 iOS 16.4+<br>
+            ❌ 不能上架应用商店
+          </div>
+          <div class="icon-item" style="text-align:left;">
+            <strong style="color:#EC4899;">📦 原生打包</strong><br>
+            ✅ 生成真正的 .apk/.ipa<br>
+            ✅ 可以上架应用商店<br>
+            ✅ 通知功能更稳定<br>
+            ❌ 苹果需开发者账号 $99/年<br>
+            ❌ 打包需要开发环境<br>
+            ❌ 更新需重新打包发布
+          </div>
+        </div>
+        <div class="note">
+          💡 <strong>推荐先用 PWA 安装</strong>，日常使用完全够用。如果需要上架应用商店或需要更强的通知能力，再考虑打包成原生 App。
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:30px;">
+      <a href="index.html" class="back-link">← 返回念念日历</a>
+    </div>
+  </div>
+
+  <script>
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach((t, i) => {
+        t.classList.toggle('active', (tab === 'pwa' && i === 0) || (tab === 'native' && i === 1));
+      });
+      document.getElementById('tab-pwa').classList.toggle('active', tab === 'pwa');
+      document.getElementById('tab-native').classList.toggle('active', tab === 'native');
+    }
+  </script>
+</body>
+</html>

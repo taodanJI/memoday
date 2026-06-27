@@ -1,0 +1,29 @@
+{
+  "name": "memoday",
+  "version": "1.1.0",
+  "description": "念念日历 - 纪念日提醒 App",
+  "main": "index.html",
+  "scripts": {
+    "build": "echo 'PWA 无需构建'",
+    "cap:sync": "npx cap sync",
+    "cap:open:android": "npx cap open android",
+    "cap:open:ios": "npx cap open ios",
+    "cap:run:android": "npx cap run android",
+    "build:android": "npx cap sync android && cd android && ./gradlew assembleRelease",
+    "build:ios": "npx cap sync ios"
+  },
+  "keywords": [
+    "calendar",
+    "reminder",
+    "memoday"
+  ],
+  "author": "",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/ios": "^8.4.1"
+  }
+}
