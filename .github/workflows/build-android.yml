@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
-    workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -18,49 +18,26 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Setup Node.js 20
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-
-    - name: Install Android cmdline-tools & build-tools
+    - name: Setup Android SDK (cmdline-tools)
       run: |
         mkdir -p ~/android-sdk/cmdline-tools
         cd ~/android-sdk/cmdline-tools
-        # Download Android command-line tools
-        curl -o cmdtools.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
-        unzip -q cmdtools.zip
-        mv cmdline-tools latest
-        rm cmdtools.zip
-        echo "ANDROID_SDK_ROOT=~/android-sdk" >> $GITHUB_ENV
-        echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$PATH" >> $GITHUB_ENV
-        # Accept licenses
-        yes | sdkmanager --licenses > /dev/null 2>&1 || true
-        # Install required packages
-        sdkmanager "platforms;android-34" "build-tools;34.0.0"
-
-    - name: Set ANDROID_HOME
-      run: |
+        curl -sL -o cmdtools.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+        unzip -qo cmdtools.zip 2>/dev/null || true
+        [ -d cmdline-tools ] && ! [ -e latest ] && mv cmdline-tools latest || true
+        rm -f cmdtools.zip
         echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-
-    - name: Install npm dependencies + Capacitor CLI
-      run: |
-        npm install
-        npm install -g @capacitor/cli
-
-    - name: Sync Capacitor to Android
-      run: npx cap sync android
-      env:
-        ANDROID_HOME: ${{ env.ANDROID_HOME || '/home/runner/android-sdk' }}
-
-    - name: Make gradlew executable
-      run: chmod +x android/gradlew
+        export PATH="$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$PATH"
+        yes | sdkmanager --licenses > /dev/null 2>&1 || true
+        sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
     - name: Build release APK
       working-directory: android
-      run: ./gradlew assembleRelease
       env:
         ANDROID_HOME: /home/runner/android-sdk
+      run: |
+        chmod +x gradlew
+        ./gradlew assembleRelease --no-daemon
 
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4

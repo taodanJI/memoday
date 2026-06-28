@@ -1,0 +1,14 @@
+{
+	"appId": "com.memoday.app",
+	"appName": "念念日历",
+	"webDir": "www",
+	"server": {
+		"androidScheme": "https"
+	},
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 2000,
+			"backgroundColor": "#FF6B8A"
+		}
+	}
+}
