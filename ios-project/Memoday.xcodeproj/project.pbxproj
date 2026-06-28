@@ -17,6 +17,7 @@
 		D1000003149A0B2B00000001 /* db.js in Resources */ = {isa = PBXBuildFile; fileRef = D2000003149A0B2B00000001 /* db.js */; };
 		D1000004149A0B2B00000001 /* notify.js in Resources */ = {isa = PBXBuildFile; fileRef = D2000004149A0B2B00000001 /* notify.js */; };
 		D1000005149A0B2B00000001 /* utils.js in Resources */ = {isa = PBXBuildFile; fileRef = D2000005149A0B2B00000001 /* utils.js */; };
+		D1000006149A0B2B00000001 /* bundle.js in Resources */ = {isa = PBXBuildFile; fileRef = D2000006149A0B2B00000001 /* bundle.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +33,7 @@
 		D2000003149A0B2B00000001 /* db.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = db.js; sourceTree = "<group>"; };
 		D2000004149A0B2B00000001 /* notify.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = notify.js; sourceTree = "<group>"; };
 		D2000005149A0B2B00000001 /* utils.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = utils.js; sourceTree = "<group>"; };
+		D2000006149A0B2B00000001 /* bundle.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = bundle.js; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -48,6 +50,7 @@
 		D9000001149A0B2B00000001 /* js */ = {
 			isa = PBXGroup;
 			children = (
+				D2000006149A0B2B00000001 /* bundle.js */,
 				D2000001149A0B2B00000001 /* app.js */,
 				D2000005149A0B2B00000001 /* utils.js */,
 				D2000003149A0B2B00000001 /* db.js */,
@@ -148,6 +151,7 @@
 				D1000003149A0B2B00000001 /* db.js in Resources */,
 				D1000002149A0B2B00000001 /* calendar.js in Resources */,
 				D1000004149A0B2B00000001 /* notify.js in Resources */,
+				D1000006149A0B2B00000001 /* bundle.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
