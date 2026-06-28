@@ -17,7 +17,10 @@ jobs:
       - name: Generate & Build
         run: |
           cd ios-app
-          xcodegen generate
+          xcodegen generate 2>&1
+          echo "=== Project files ==="
+          find . -name "*.xcodeproj" -o -name "*.pbxproj" | head -5
+          
           xcodebuild \
             -project Memoday.xcodeproj \
             -scheme Memoday \
@@ -30,16 +33,47 @@ jobs:
             ENABLE_BITCODE=NO \
             ONLY_ACTIVE_ARCH=NO \
             clean build 2>&1 | tee log.txt | tail -40
-          echo "EXIT: $?"
-          find build -name "Memoday.app" | head -3
+          echo ""
+          echo "=== BUILD EXIT: $? ==="
+
+      - name: Verify & Fix App Bundle
+        run: |
+          cd ios-app
+          APP=$(find build -name "Memoday.app" -not -path "*dSYM*" | head -1)
+          echo "App path: $APP"
+          if [ -z "$APP" ]; then
+            echo "ERROR: No .app found!"
+            find build -type d -name "*.app" | head -5
+            exit 1
+          fi
+          echo "=== .app contents ==="
+          ls -la "$APP/"
+          echo ""
+          echo "=== Info.plist check ==="
+          if [ ! -f "$APP/Info.plist" ]; then
+            echo "Info.plist MISSING! Copying manually..."
+            cp MemodayApp/Info.plist "$APP/Info.plist"
+          fi
+          ls -la "$APP/Info.plist"
+          echo ""
+          echo "=== Executable check ==="
+          if [ -f "$APP/Memoday" ]; then
+            echo "Executable OK"
+          else
+            echo "Looking for executable..."
+            find "$APP" -type f -perm +111 2>/dev/null | head -3
+          fi
 
       - name: Package IPA
         run: |
           cd ios-app
           APP=$(find build -name "Memoday.app" -not -path "*dSYM*" | head -1)
-          if [ ! "$APP" ]; then echo "FAIL"; tail -30 log.txt; exit 1; fi
+          # Ensure Info.plist exists
+          [ ! -f "$APP/Info.plist" ] && cp MemodayApp/Info.plist "$APP/Info.plist"
           rm -rf Payload; mkdir Payload; cp -R "$APP" Payload/
           zip -rq ../Memoday.ipa Payload/
+          echo "=== IPA Contents ==="
+          unzip -l ../Memoday.ipa | head -20
           ls -lh ../Memoday.ipa
 
       - name: Upload
