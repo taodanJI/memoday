@@ -12,6 +12,11 @@
 		B3000001149A0B2B00000003 /* index.html in Resources */ = {isa = PBXBuildFile; fileRef = B6000001149A0B2B00000001 /* index.html */; };
 		B3000001149A0B2B00000004 /* style.css in Resources */ = {isa = PBXBuildFile; fileRef = B7000001149A0B2B00000001 /* style.css */; };
 		B3000001149A0B2B00000005 /* sw.js in Resources */ = {isa = PBXBuildFile; fileRef = B8000001149A0B2B00000001 /* sw.js */; };
+		D1000001149A0B2B00000001 /* app.js in Resources */ = {isa = PBXBuildFile; fileRef = D2000001149A0B2B00000001 /* app.js */; };
+		D1000002149A0B2B00000001 /* calendar.js in Resources */ = {isa = PBXBuildFile; fileRef = D2000002149A0B2B00000001 /* calendar.js */; };
+		D1000003149A0B2B00000001 /* db.js in Resources */ = {isa = PBXBuildFile; fileRef = D2000003149A0B2B00000001 /* db.js */; };
+		D1000004149A0B2B00000001 /* notify.js in Resources */ = {isa = PBXBuildFile; fileRef = D2000004149A0B2B00000001 /* notify.js */; };
+		D1000005149A0B2B00000001 /* utils.js in Resources */ = {isa = PBXBuildFile; fileRef = D2000005149A0B2B00000001 /* utils.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,6 +27,11 @@
 		B6000001149A0B2B00000001 /* index.html */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
 		B7000001149A0B2B00000001 /* style.css */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.css; path = style.css; sourceTree = "<group>"; };
 		B8000001149A0B2B00000001 /* sw.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = sw.js; sourceTree = "<group>"; };
+		D2000001149A0B2B00000001 /* app.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = app.js; sourceTree = "<group>"; };
+		D2000002149A0B2B00000001 /* calendar.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = calendar.js; sourceTree = "<group>"; };
+		D2000003149A0B2B00000001 /* db.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = db.js; sourceTree = "<group>"; };
+		D2000004149A0B2B00000001 /* notify.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = notify.js; sourceTree = "<group>"; };
+		D2000005149A0B2B00000001 /* utils.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = utils.js; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -35,6 +45,18 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		D9000001149A0B2B00000001 /* js */ = {
+			isa = PBXGroup;
+			children = (
+				D2000001149A0B2B00000001 /* app.js */,
+				D2000005149A0B2B00000001 /* utils.js */,
+				D2000003149A0B2B00000001 /* db.js */,
+				D2000002149A0B2B00000001 /* calendar.js */,
+				D2000004149A0B2B00000001 /* notify.js */,
+			);
+			path = js;
+			sourceTree = "<group>";
+		};
 		B9000003149A0B2B00000001 /* MemodayApp */ = {
 			isa = PBXGroup;
 			children = (
@@ -44,6 +66,7 @@
 				B6000001149A0B2B00000001 /* index.html */,
 				B7000001149A0B2B00000001 /* style.css */,
 				B8000001149A0B2B00000001 /* sw.js */,
+				D9000001149A0B2B00000001 /* js */,
 			);
 			path = MemodayApp;
 			sourceTree = "<group>";
@@ -120,6 +143,11 @@
 				B3000001149A0B2B00000003 /* index.html in Resources */,
 				B3000001149A0B2B00000004 /* style.css in Resources */,
 				B3000001149A0B2B00000005 /* sw.js in Resources */,
+				D1000001149A0B2B00000001 /* app.js in Resources */,
+				D1000005149A0B2B00000001 /* utils.js in Resources */,
+				D1000003149A0B2B00000001 /* db.js in Resources */,
+				D1000002149A0B2B00000001 /* calendar.js in Resources */,
+				D1000004149A0B2B00000001 /* notify.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
