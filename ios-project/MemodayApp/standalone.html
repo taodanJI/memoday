@@ -615,13 +615,30 @@ function formatCountdown(days) {
 }
 
 // ========== 通知系统 ==========
+// 检测是否运行在 iOS App 中（有原生桥接）
+var isIOSApp = !!(window.webkit && window.webkit.messageHandlers && window.__nativeBridgeReady);
+
 function requestNotificationPermission() {
+  if (isIOSApp) {
+    // iOS App: 使用原生通知，权限已在 App 启动时请求
+    if (window.__nativeNotif) {
+      return window.__nativeNotif.requestPermission().then(function() { return true; }).catch(function() { return true; });
+    }
+    return Promise.resolve(true);
+  }
+  // 浏览器环境：使用 Web Notification API
   if (!('Notification' in window)) return Promise.resolve(false);
   if (Notification.permission === 'granted') return Promise.resolve(true);
   if (Notification.permission === 'denied') return Promise.resolve(false);
   return Notification.requestPermission().then(function(r) { return r === 'granted'; });
 }
+
 function sendNotification(title, options) {
+  if (isIOSApp) {
+    // iOS App: 原生通知由 scheduleNotification 调度，这里不立即发送
+    return;
+  }
+  // 浏览器环境：使用 Web Notification API
   if (!('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
   var settings = getSettings();
@@ -635,7 +652,60 @@ function sendNotification(title, options) {
     setTimeout(function() { notification.close(); }, 8000);
   } catch(e) {}
 }
+
+// iOS App: 调度本地通知
+function scheduleNotificationForEvent(event, reminderDays) {
+  if (!isIOSApp || !window.__nativeNotif) return;
+  var nextDate = getNextOccurrence(event);
+  if (!nextDate) return;
+  var info = getEventTypeInfo(event.type);
+  var fireDate = new Date(nextDate);
+  fireDate.setDate(fireDate.getDate() - reminderDays);
+  fireDate.setHours(9, 0, 0, 0); // 早上9点提醒
+
+  // 如果时间已过，跳过
+  if (fireDate <= new Date()) return;
+
+  var notifId = 'memoday_' + event.id + '_' + reminderDays + 'd';
+  var title = '【' + info.label + '提醒】' + event.title;
+  var body = (reminderDays === 0 ? '今天是「' + event.title + '」！' : '还有' + reminderDays + '天就是「' + event.title + '」了') + (event.note ? '\n' + event.note : '');
+
+  window.__sendNativeNotification(title, body, notifId, fireDate.getTime());
+}
+
+// iOS App: 为所有事件调度通知
+function scheduleAllNotifications() {
+  if (!isIOSApp) return;
+  var events = getAllEvents();
+  // 先取消所有旧通知
+  if (window.__cancelAllNativeNotifications) window.__cancelAllNativeNotifications();
+  for (var i = 0; i < events.length; i++) {
+    var event = events[i];
+    var reminders = event.reminders || [0, 1];
+    for (var j = 0; j < reminders.length; j++) {
+      scheduleNotificationForEvent(event, reminders[j]);
+    }
+  }
+  console.log('[iOS] 已调度 ' + events.length + ' 个事件的通知');
+}
+
+// iOS App: 取消某个事件的所有通知
+function cancelEventNotifications(eventId) {
+  if (!isIOSApp || !window.__nativeNotif) return;
+  var reminders = [0, 1, 3, 7, 14, 30];
+  for (var i = 0; i < reminders.length; i++) {
+    var notifId = 'memoday_' + eventId + '_' + reminders[i] + 'd';
+    if (window.__cancelNativeNotification) window.__cancelNativeNotification(notifId);
+  }
+}
+
 function checkReminders() {
+  if (isIOSApp) {
+    // iOS App: 重新调度所有通知（事件可能有变化）
+    scheduleAllNotifications();
+    return { today: 0, tomorrow: 0 };
+  }
+  // 浏览器环境：实时检查并发送通知
   var events = getAllEvents();
   var settings = getSettings();
   if (!settings.notifications) return;
@@ -668,19 +738,44 @@ function checkReminders() {
   }
   for (var i = 0; i < todayEvents.length; i++) {
     var event = todayEvents[i], info = getEventTypeInfo(event.type);
-    sendNotification('【今天】' + event.title, { body: '今天是「' + event.title + '」🎉 ' + (event.note ? '\n' + event.note : ''), tag: 'reminder_' + event.id + '_0d' });
+    sendNotification('【今天】' + event.title, { body: '今天是「' + event.title + '」\u200d🎉 ' + (event.note ? '\n' + event.note : ''), tag: 'reminder_' + event.id + '_0d' });
   }
   return { today: todayEvents.length, tomorrow: tomorrowEvents.length };
 }
-function getNotificationStatus() { if (!('Notification' in window)) return 'unsupported'; return Notification.permission; }
+
+function getNotificationStatus() {
+  if (isIOSApp) return 'granted'; // iOS App 中我们假设已授权
+  if (!('Notification' in window)) return 'unsupported';
+  return Notification.permission;
+}
+
 var checkInterval = null;
 function startReminderCheck() {
+  if (isIOSApp) {
+    // iOS App: 调度所有通知，然后每小时重新调度一次（以防事件变化）
+    scheduleAllNotifications();
+    if (checkInterval) clearInterval(checkInterval);
+    checkInterval = setInterval(function() { scheduleAllNotifications(); }, 3600000);
+    return;
+  }
+  // 浏览器环境
   try { checkReminders(); } catch(e) {}
   if (checkInterval) clearInterval(checkInterval);
   checkInterval = setInterval(function() { try { checkReminders(); } catch(e) {} }, 3600000);
   document.addEventListener('visibilitychange', function() { if (!document.hidden) { try { checkReminders(); } catch(e) {} } });
 }
+
 function sendTestNotification() {
+  if (isIOSApp) {
+    // iOS App: 调度一个1分钟后的测试通知
+    var testId = 'memoday_test_' + Date.now();
+    var fireDate = new Date(Date.now() + 60000); // 1分钟后
+    if (window.__sendNativeNotification) {
+      window.__sendNativeNotification('念念日历 🎉', '通知功能已开启！重要纪念日会提前提醒你。', testId, fireDate.getTime());
+      showToast('测试通知已调度，1分钟后会收到');
+    }
+    return;
+  }
   sendNotification('念念日历 🎉', { body: '通知功能已开启！重要纪念日会提前提醒你。', tag: 'test_notification' });
 }
 
@@ -927,6 +1022,7 @@ function bindSettingsEvents(settings, profile) {
   });
   document.getElementById('settingClear').addEventListener('click', function() {
     showConfirm('清空所有数据', '确定要清空所有纪念日和事件吗？此操作不可撤销！', function() {
+      if (isIOSApp) { if (window.__cancelAllNativeNotifications) window.__cancelAllNativeNotifications(); }
       localStorage.removeItem('memoday_events'); localStorage.removeItem('memoday_shared');
       showToast('数据已清空'); renderSettingsPage();
     }, '🗑️');
@@ -956,6 +1052,7 @@ function bindEventModal() {
     var event = getEventById(editingEventId); if (!event) return;
     showConfirm('删除事件', '确定要删除「' + event.title + '」吗？' + (event.isShared ? '删除后你将不再收到此共享纪念日的提醒。' : '此操作不可撤销。'), function() {
       if (event.isShared) deleteSharedEvent(editingEventId); else deleteEvent(editingEventId);
+      if (isIOSApp) cancelEventNotifications(editingEventId);
       closeEventModal(); showToast('已删除'); refreshCurrentPage();
     }, '🗑️');
   });
@@ -1008,14 +1105,21 @@ function handleEventSave() {
   if (isSharedCreate) {
     var profile = getProfile();
     var event = createSharedEvent(eventData, profile.name);
-    closeEventModal(); showToast('共享纪念日已创建'); showShareLink(event); refreshCurrentPage(); return;
+    closeEventModal(); showToast('共享纪念日已创建'); showShareLink(event);
+    if (isIOSApp) scheduleAllNotifications();
+    refreshCurrentPage(); return;
   }
   if (id) {
     var existing = getEventById(id);
-    if (existing && existing.isShared) updateSharedEvent(id, eventData);
-    else saveEvent(Object.assign({ id: id }, eventData));
+    if (existing && existing.isShared) { updateSharedEvent(id, eventData); }
+    else { saveEvent(Object.assign({ id: id }, eventData)); }
     showToast('已保存');
-  } else { saveEvent(eventData); showToast('已创建'); }
+    if (isIOSApp) { cancelEventNotifications(id); scheduleAllNotifications(); }
+  } else {
+    var newEvent = saveEvent(eventData);
+    showToast('已创建');
+    if (isIOSApp) scheduleAllNotifications();
+  }
   closeEventModal(); refreshCurrentPage(); try { checkReminders(); } catch(e) {}
 }
 
@@ -1077,7 +1181,11 @@ function bindJoinModal() {
     var profile = getProfile();
     var result = importSharedEvent(pendingJoinData, profile.name);
     modal.classList.remove('show');
-    if (result.success) { showToast('加入成功！双方都会收到提醒 💞'); navigateTo('shared'); }
+    if (result.success) {
+      showToast('加入成功！双方都会收到提醒 💞');
+      if (isIOSApp) scheduleAllNotifications();
+      navigateTo('shared');
+    }
     else showToast(result.error);
     pendingJoinData = null;
   });
