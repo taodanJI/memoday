@@ -7,12 +7,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     var window: UIWindow?
 
     func application(_ app: UIApplication, didFinishLaunchingWithOptions opts: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // 只设置delegate，不主动请求权限（权限请求只在用户保存事件时通过JS桥接触发）
         UNUserNotificationCenter.current().delegate = self
-        UNUserNotificationCenter.current().requestAuthorization(
-            options: [.alert, .badge, .sound]
-        ) { granted, error in
-            print("[Notify] 权限请求结果: \(granted)")
-        }
         window = UIWindow(frame: UIScreen.main.bounds)
         let vc = ViewController()
         window?.rootViewController = vc
@@ -95,7 +91,14 @@ class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHan
 
     func handleNotifyAction(_ action: String, _ dict: [String: Any]) {
         if action == "requestPermission" {
-            nc.requestAuthorization(options: [.alert, .badge, .sound]) { g, e in print("[Notify] 权限:\(g)") }
+            // 先检查是否已授权，已授权就不再弹窗（跟Android一致）
+            nc.getNotificationSettings { settings in
+                if settings.authorizationStatus == .authorized {
+                    print("[Notify] 已授权，不重复弹窗")
+                } else {
+                    self.nc.requestAuthorization(options: [.alert, .badge, .sound]) { g, e in print("[Notify] 权限:\(g)") }
+                }
+            }
         }
         else if action == "getPermissionStatus" {
             nc.getNotificationSettings { s in
