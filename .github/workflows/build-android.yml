@@ -3,6 +3,10 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'android/**'
+      - 'memoday/public/**'
+      - '.github/workflows/build-android.yml'
   workflow_dispatch:
 
 jobs:
@@ -19,15 +23,32 @@ jobs:
         java-version: '17'
 
     - name: Setup Android SDK
-      uses: maxim-lobanov/setup-android-action@v1
-      with:
-        api-level: 34
-        build-tools: 34.0.0
+      run: |
+        # 下载 Android command-line tools
+        cd $HOME
+        mkdir -p android-sdk/cmdline-tools
+        curl -o sdk.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+        unzip -q sdk.zip
+        mv cmdline-tools android-sdk/cmdline-tools/latest
+        
+        # 设置环境变量
+        echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+        echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
+        
+        # 接受所有许可
+        yes | sdkmanager --licenses > /dev/null 2>&1 || true
+        
+        # 安装所需组件
+        sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
     - name: Build APK
+      env:
+        ANDROID_HOME: ${{ env.ANDROID_HOME || '/home/runner/android-sdk' }}
       working-directory: android
       run: |
         chmod +x gradlew
+        export ANDROID_HOME=$HOME/android-sdk
         ./gradlew assembleRelease --no-daemon
 
     - name: Upload APK
