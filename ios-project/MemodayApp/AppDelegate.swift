@@ -132,28 +132,28 @@ class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHan
         }
     }
 
-    // 使用精确的日期触发（避免 TimeInterval 的系统延迟）
+    // 使用 UNTimeIntervalNotificationTrigger（最快的通知方式）
     func schedule(id: String, title: String, body: String, seconds: TimeInterval) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
         content.badge = NSNumber(value: 1)
-        // 设 .timeSensitive 让通知立即弹出（iOS 15+），免费账号不支持但设了无害
+        // 设 .timeSensitive 让通知立即弹出（iOS 15+）
         if #available(iOS 15.0, *) {
             content.interruptionLevel = .timeSensitive
         }
 
-        // 用精确的日期时间触发（比 TimeInterval 更可靠）
-        let fireDate = Date().addingTimeInterval(seconds)
-        let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: fireDate)
-        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+        // TimeInterval 触发器：从当前时间算起，经过 seconds 秒后触发
+        // 这是最快、最精确的本地通知方式
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, seconds), repeats: false)
 
         let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
         nc.add(request) { error in
             if let e = error {
                 print("[Notify] 调度失败: \(e.localizedDescription)")
             } else {
+                let fireDate = Date().addingTimeInterval(max(1, seconds))
                 print("[Notify] 已调度: \(id) → \(fireDate)")
             }
         }
