@@ -139,13 +139,15 @@ class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHan
         content.body = body
         content.sound = .default
         content.badge = NSNumber(value: 1)
-        // 设 .timeSensitive 让通知立即弹出（iOS 15+）
+        // 注意：免费开发者账号不支持 .timeSensitive，设了反而可能被系统严格对待
+        // 改用 .active（默认），让系统正常调度
         if #available(iOS 15.0, *) {
-            content.interruptionLevel = .timeSensitive
+            content.interruptionLevel = .active
         }
 
         // TimeInterval 触发器：从当前时间算起，经过 seconds 秒后触发
         // 这是最快、最精确的本地通知方式
+        // 免费账号的 App，系统会略有延迟（约30-60秒），这是 iOS 对侧载 App 的限制
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, seconds), repeats: false)
 
         let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
