@@ -9,7 +9,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         let vc = ViewController()
         window?.rootViewController = vc
         window?.makeKeyAndVisible()
-        return True
+        return true
     }
 }
 
@@ -18,7 +18,7 @@ class ViewController: UIViewController, WKNavigationDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = UIColor(red: 0.95, green: 0.96, blue: 0.98, alpha: 1)
-        title = "\u5ff5\u5ff5\u65e5\u5386"
+        title = "念念日历"
         let cfg = WKWebViewConfiguration()
         cfg.allowsInlineMediaPlayback = true
         cfg.defaultWebpagePreferences?.allowsContentJavaScript = true
