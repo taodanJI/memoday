@@ -14,54 +14,60 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build App
+      - name: Show Xcode info
         run: |
-          set -e
+          echo "=== Xcode version ==="
+          xcodebuild -version
+          echo "=== SDKs available ==="
+          xcodebuild -showsdks
+          echo "=== Project file ==="
+          ls -la ios-project/Memoday.xcodeproj/
+          head -5 ios-project/Memoday.xcodeproj/project.pbxproj
 
-          # === Step 1: Create app bundle structure ===
-          APP_NAME="Memoday"
-          APP_BUNDLE="${APP_NAME}.app"
-          mkdir -p "${APP_BUNDLE}"
-          
-          # Copy Info.plist
-          cp ios-app/MemodayApp/Info.plist "${APP_BUNDLE}/"
-          
-          # === Step 2: Compile Swift code ===
-          # Use swiftc to compile AppDelegate.swift into a binary
-          echo "=== Compiling Swift source ==="
-          swiftc \
+      - name: Build
+        working-directory: ios-project
+        run: |
+          set +e
+          xcodebuild \
+            -project Memoday.xcodeproj \
+            -scheme Memoday \
+            -configuration Debug \
             -sdk iphoneos \
-            -target arm64-apple-ios14.0 \
-            -parse-as-library \
-            ios-app/MemodayApp/AppDelegate.swift \
-            -o "${APP_BUNDLE}/${APP_NAME}" 2>&1 | tee swift-build.log || {
-            echo "=== SWIFTC BUILD FAILED ==="
-            cat swift-build.log
-            exit 2
-          }
-          
-          # Make binary executable
-          chmod +x "${APP_BUNDLE}/${APP_NAME}"
-          
-          # Verify binary
-          file "${APP_BUNDLE}/${APP_NAME}"
-          ls -la "${APP_BUNDLE}/"
-          
-          # === Step 3: Copy web assets ===
-          cp ios-app/MemodayApp/index.html "${APP_BUNDLE}/"
-          cp ios-app/MemodayApp/style.css "${APP_BUNDLE}/"
-          cp ios-app/MemodayApp/sw.js "${APP_BUNDLE}/"
-          cp ios-app/MemodayApp/icon.svg "${APP_BUNDLE}/"
-          cp ios-app/MemodayApp/manifest.json "${APP_BUNDLE}/"
-          [ -d ios-app/MemodayApp/js ] && cp -r ios-app/MemodayApp/js "${APP_BUNDLE}/" || true
-          [ -d ios-app/MemodayApp/icons ] && cp -r ios-app/MemodayApp/icons "${APP_BUNDLE}/" || true
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ENABLE_BITCODE=NO \
+            TARGETED_DEVICE_FAMILY="1" \
+            clean build 2>&1 | tee build.log
+          echo "=== EXIT CODE: $? ==="
+          echo "=== Looking for .app ==="
+          find build -name "Memoday.app" -type d 2>/dev/null | while read f; do
+            echo "FOUND: $f"
+            ls -la "$f/" | head -15
+          done
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ios-project/build.log
+          retention-days: 7
 
       - name: Package IPA
         run: |
+          APP_PATH=$(find ios-project/build -name "Memoday.app" -type d 2>/dev/null | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: .app not found"
+            find ios-project/build -type d 2>/dev/null | head -20
+            exit 1
+          fi
+          echo "Using: $APP_PATH"
           mkdir -p Payload
-          cp -r Memoday.app Payload/
+          cp -r "$APP_PATH" Payload/
           zip -r Memoday.ipa Payload
-          echo "IPA created:"
+          echo "IPA OK:"
           ls -lh Memoday.ipa
 
       - name: Upload IPA
