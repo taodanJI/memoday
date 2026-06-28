@@ -18,22 +18,36 @@ class ViewController: UIViewController, WKNavigationDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = UIColor(red: 0.95, green: 0.96, blue: 0.98, alpha: 1)
-        title = "念念日历"
+        title = "\u5FF5\u5FF5\u65E5\u5386"
         let cfg = WKWebViewConfiguration()
         cfg.allowsInlineMediaPlayback = true
         cfg.defaultWebpagePreferences?.allowsContentJavaScript = true
+        cfg.preferences.javaScriptEnabled = true
         webView = WKWebView(frame: view.bounds, configuration: cfg)
         webView.navigationDelegate = self
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         webView.scrollView.bounces = false
         view.addSubview(webView)
-        if let u = Bundle.main.url(forResource: "index", withExtension: "html") {
+        loadContent()
+    }
+
+    func loadContent() {
+        let onlineURL = URL(string: "https://772e2c5c13b4487d91faaa869468fee5.app.codebuddy.work/")
+        if let url = onlineURL {
+            var req = URLRequest(url: url)
+            req.cachePolicy = .reloadIgnoringLocalCacheData
+            webView.load(req)
+        } else if let u = Bundle.main.url(forResource: "index", withExtension: "html") {
             webView.loadFileURL(u, allowingReadAccessTo: u.deletingLastPathComponent())
-        } else if let u = URL(string: "https://772e2c5c13b4487d91faaa869468fee5.app.codebuddy.work/") {
-            webView.load(URLRequest(url: u))
         }
     }
-    func webView(_: WKWebView, didStartProvisionalNavigation _: WKNavigation?) {}
+
     func webView(_: WKWebView, didFinish _: WKNavigation?) {}
+    func webView(_: WKWebView, didFail _: WKNavigation?, withError error: Error) {
+        print("WebView load error: \(error.localizedDescription)")
+        if let u = Bundle.main.url(forResource: "index", withExtension: "html") {
+            webView.loadFileURL(u, allowingReadAccessTo: u.deletingLastPathComponent())
+        }
+    }
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 }
