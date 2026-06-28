@@ -2,25 +2,21 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
-    paths:
-      - 'android/**'
-      - 'ios-project/MemodayApp/standalone.html'
-      - '.github/workflows/build-android.yml'
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
+    - name: Checkout
       uses: actions/checkout@v4
 
     - name: Setup JDK 17
       uses: actions/setup-java@v4
       with:
-        distribution: 'temurin'
-        java-version: '17'
+        distribution: temurin
+        java-version: 17
 
     - name: Copy standalone.html to Android assets
       run: |
@@ -28,30 +24,28 @@ jobs:
         cp ios-project/MemodayApp/standalone.html android/app/src/main/assets/public/standalone.html
 
     - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-
-    - name: Accept licenses
-      run: yes | sdkmanager --licenses 2>/dev/null || true
-
-    - name: Install SDK packages
-      run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+      run: |
+        # ubuntu-latest has sdkmanager pre-installed at /usr/local/lib/android/sdk/cmdline-tools/latest/bin/
+        export ANDROID_HOME=/usr/local/lib/android/sdk
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" > /dev/null 2>&1 || true
 
     - name: Build APK
       working-directory: android
       run: |
         chmod +x gradlew
-        ./gradlew assembleRelease --no-daemon 2>&1 | tee /tmp/build.log
+        ./gradlew assembleRelease --no-daemon 2>&1
 
-    - name: Find APK
+    - name: Find and list APK
       run: |
-        echo "Searching for APK files..."
+        echo "=== Finding APK ==="
         find android -name "*.apk" -type f
-        APK_PATH=$(find android/app/build/outputs -name "*.apk" -type f | head -1)
-        echo "APK found at: $APK_PATH"
+        echo "=== Build outputs ==="
+        ls -laR android/app/build/outputs/ 2>/dev/null || echo "No outputs dir"
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: Memoday-Android-APK
-        path: android/app/build/outputs/**/*.apk
+        path: android/**/*.apk
         retention-days: 30
