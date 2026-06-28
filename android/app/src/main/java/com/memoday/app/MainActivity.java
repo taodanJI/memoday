@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.webkit.JavascriptInterface;
@@ -62,6 +63,15 @@ public class MainActivity extends AppCompatActivity {
                 // Inject JS: mark as Android app + notification permission status
                 String js = "if(window.__setNativeReady){window.__setNativeReady('android');}" +
                             "if(window.__updateNotifPerm){window.__updateNotifPerm(" + hasNotificationPermission() + ");}";
+                // 处理 Deep Link: 把 join 参数传给 JS
+                Intent intent = getIntent();
+                Uri data = intent.getData();
+                if (data != null) {
+                    String joinParam = data.getQueryParameter("join");
+                    if (joinParam != null) {
+                        js += "if(window.__setJoinData){window.__setJoinData('" + joinParam + "');}";
+                    }
+                }
                 view.evaluateJavascript(js, null);
             }
         });
@@ -103,6 +113,23 @@ public class MainActivity extends AppCompatActivity {
                     == PackageManager.PERMISSION_GRANTED;
         }
         return NotificationManagerCompat.from(this).areNotificationsEnabled();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        // 处理新的 Deep Link（App已在运行时收到新链接）
+        setIntent(intent);
+        Uri data = intent.getData();
+        if (data != null && webView != null) {
+            String joinParam = data.getQueryParameter("join");
+            if (joinParam != null) {
+                webView.evaluateJavascript(
+                    "if(window.__setJoinData){window.__setJoinData('" + joinParam + "');}",
+                    null
+                );
+            }
+        }
     }
 
     @Override
@@ -178,7 +205,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showNotification(String title, String message) {
         if (!hasNotificationPermission()) {
-            requestNotificationPermission();
+            // 没权限就静默跳过，不弹窗（弹窗只在用户主动保存事件时触发）
             return;
         }
 

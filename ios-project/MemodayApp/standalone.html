@@ -503,6 +503,11 @@ function importSharedEvent(data, myName) {
   return { success: true, event: event };
 }
 function generateShareLink(event) {
+  // 在原生App中，使用在线网址（file:// URL别人打不开）
+  var baseUrl = 'https://772e2c5c13b4487d91faaa869468fee5.app.codebuddy.work/';
+  if (isIOSApp || isAndroidApp) {
+    return baseUrl + '?join=' + encodeShareData(event);
+  }
   return window.location.origin + window.location.pathname + '?join=' + encodeShareData(event);
 }
 function generateInviteCode() {
@@ -789,6 +794,11 @@ function checkReminders() {
 
 function getNotificationStatus() {
   if (isIOSApp) return 'granted'; // iOS App 中我们假设已授权
+  if (isAndroidApp) {
+    try {
+      return window.AndroidNative.hasNotificationPermission() ? 'granted' : 'default';
+    } catch(e) { return 'default'; }
+  }
   if (!('Notification' in window)) return 'unsupported';
   return Notification.permission;
 }
@@ -897,6 +907,24 @@ function init() {
 }
 
 function checkUrlJoin() {
+  // Android App: 检查原生注入的 join 数据
+  if (window.__pendingJoinData) {
+    var data = decodeShareData(window.__pendingJoinData);
+    window.__pendingJoinData = null;
+    if (!data) { showToast('邀请链接无效'); return; }
+    var shared = getSharedEvents();
+    if (data.inviteCode && shared.some(function(e) { return e.inviteCode === data.inviteCode; })) {
+      showToast('你已经加入过这个纪念日了');
+      return;
+    }
+    pendingJoinData = data;
+    var info = getEventTypeInfo(data.type || 'anniversary');
+    document.getElementById('joinTitle').textContent = (data.owner || '好友') + ' 邀请你加入';
+    document.getElementById('joinDesc').innerHTML = info.icon + ' <strong>' + data.title + '</strong><br>日期：' + formatDate(data.date) + '<br>类型：' + info.label + '<br>加入后双方都会收到提醒通知 💞';
+    document.getElementById('joinModal').classList.add('show');
+    return;
+  }
+  // 浏览器/Web: 检查 URL 参数
   var params = new URLSearchParams(window.location.search);
   var joinData = params.get('join');
   if (!joinData) return;
@@ -915,6 +943,15 @@ function checkUrlJoin() {
   document.getElementById('joinModal').classList.add('show');
   window.history.replaceState({}, '', window.location.pathname);
 }
+
+// 原生App注入 join 数据的回调
+window.__setJoinData = function(joinStr) {
+  window.__pendingJoinData = joinStr;
+  // 页面已加载完毕后立即处理
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    try { checkUrlJoin(); } catch(e) {}
+  }
+};
 
 function bindNavigation() {
   document.querySelectorAll('.tab-item').forEach(function(btn) {
