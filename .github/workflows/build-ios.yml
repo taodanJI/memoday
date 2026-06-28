@@ -3,82 +3,81 @@ name: Build iOS IPA
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-14
+    timeout-minutes: 15
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Install xcodegen
         run: brew install xcodegen 2>/dev/null || true
 
-      - name: Generate & Build
+      - name: Generate Xcode project
+        working-directory: ios-app
         run: |
-          cd ios-app
           xcodegen generate 2>&1
-          echo "=== Project files ==="
-          find . -name "*.xcodeproj" -o -name "*.pbxproj" | head -5
-          
+          echo "--- Project files ---"
+          find . -name "*.xcodeproj" -o -name "*.xcworkspace" | head -5
+          echo "--- MemodayApp contents ---"
+          ls -la MemodayApp/ 2>&1 || echo "MemodayApp dir not found"
+          echo "--- Info.plist check ---"
+          ls -la MemodayApp/Info.plist 2>&1 || echo "NO Info.plist"
+
+      - name: Build
+        working-directory: ios-app
+        run: |
+          set +e
           xcodebuild \
             -project Memoday.xcodeproj \
             -scheme Memoday \
-            -configuration Release \
+            -configuration Debug \
             -sdk iphoneos \
             -derivedDataPath build \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ENABLE_BITCODE=NO \
-            ONLY_ACTIVE_ARCH=NO \
-            clean build 2>&1 | tee log.txt | tail -40
-          echo ""
-          echo "=== BUILD EXIT: $? ==="
+            TARGETED_DEVICE_FAMILY="1" \
+            clean build 2>&1 | tee build.log
+          echo "=== EXIT CODE: $? ==="
+          echo "--- Looking for .app ---"
+          find build -name "*.app" -type d 2>&1 | head -10
+          echo "--- Products dir ---"
+          ls -laR build/Build/Products/ 2>&1 | head -30
 
-      - name: Verify & Fix App Bundle
-        run: |
-          cd ios-app
-          APP=$(find build -name "Memoday.app" -not -path "*dSYM*" | head -1)
-          echo "App path: $APP"
-          if [ -z "$APP" ]; then
-            echo "ERROR: No .app found!"
-            find build -type d -name "*.app" | head -5
-            exit 1
-          fi
-          echo "=== .app contents ==="
-          ls -la "$APP/"
-          echo ""
-          echo "=== Info.plist check ==="
-          if [ ! -f "$APP/Info.plist" ]; then
-            echo "Info.plist MISSING! Copying manually..."
-            cp MemodayApp/Info.plist "$APP/Info.plist"
-          fi
-          ls -la "$APP/Info.plist"
-          echo ""
-          echo "=== Executable check ==="
-          if [ -f "$APP/Memoday" ]; then
-            echo "Executable OK"
-          else
-            echo "Looking for executable..."
-            find "$APP" -type f -perm +111 2>/dev/null | head -3
-          fi
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ios-app/build.log
+          retention-days: 7
 
       - name: Package IPA
         run: |
-          cd ios-app
-          APP=$(find build -name "Memoday.app" -not -path "*dSYM*" | head -1)
-          # Ensure Info.plist exists
-          [ ! -f "$APP/Info.plist" ] && cp MemodayApp/Info.plist "$APP/Info.plist"
-          rm -rf Payload; mkdir Payload; cp -R "$APP" Payload/
-          zip -rq ../Memoday.ipa Payload/
-          echo "=== IPA Contents ==="
-          unzip -l ../Memoday.ipa | head -20
-          ls -lh ../Memoday.ipa
+          APP_PATH=$(find ios-app/build -name "Memoday.app" -type d 2>/dev/null | head -1)
+          echo "APP_PATH=${APP_PATH}"
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app found! Trying alternate locations..."
+            find ios-app/build -type d -name "*.app" 2>&1
+            find ios-app/build -type f -name "Memoday" 2>&1
+            exit 1
+          fi
+          mkdir -p Payload
+          cp -r "$APP_PATH" Payload/
+          zip -r Memoday.ipa Payload
+          echo "IPA created OK"
+          ls -lh Memoday.ipa
 
-      - name: Upload
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: Memoday-iOS-IPA
           path: Memoday.ipa
           retention-days: 30
+          if-no-files-found: warn
