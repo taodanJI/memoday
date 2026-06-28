@@ -3,6 +3,10 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'android/**'
+      - 'ios-project/MemodayApp/standalone.html'
+      - '.github/workflows/build-android.yml'
   workflow_dispatch:
 
 jobs:
@@ -18,22 +22,36 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Accept licenses & install platform
+    - name: Copy standalone.html to Android assets
       run: |
-        # sdkmanager is pre-installed on ubuntu-latest runners
-        yes | sdkmanager --licenses > /dev/null 2>&1 || true
-        sdkmanager "platforms;android-34" > /dev/null 2>&1 || true
+        mkdir -p android/app/src/main/assets/public
+        cp ios-project/MemodayApp/standalone.html android/app/src/main/assets/public/standalone.html
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Accept licenses
+      run: yes | sdkmanager --licenses 2>/dev/null || true
+
+    - name: Install SDK packages
+      run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
     - name: Build APK
       working-directory: android
       run: |
         chmod +x gradlew
-        ./gradlew assembleRelease --no-daemon
+        ./gradlew assembleRelease --no-daemon 2>&1 | tee /tmp/build.log
+
+    - name: Find APK
+      run: |
+        echo "Searching for APK files..."
+        find android -name "*.apk" -type f
+        APK_PATH=$(find android/app/build/outputs -name "*.apk" -type f | head -1)
+        echo "APK found at: $APK_PATH"
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: Memoday-Android-APK
-        path: |
-          android/**/*.apk
+        path: android/app/build/outputs/**/*.apk
         retention-days: 30
