@@ -14,16 +14,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show Xcode info
-        run: |
-          echo "=== Xcode version ==="
-          xcodebuild -version
-          echo "=== SDKs available ==="
-          xcodebuild -showsdks
-          echo "=== Project file ==="
-          ls -la ios-project/Memoday.xcodeproj/
-          head -5 ios-project/Memoday.xcodeproj/project.pbxproj
-
       - name: Build
         working-directory: ios-project
         run: |
@@ -39,12 +29,22 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ENABLE_BITCODE=NO \
             TARGETED_DEVICE_FAMILY="1" \
+            OTHER_SWIFT_FLAGS="-parse-as-library" \
             clean build 2>&1 | tee build.log
-          echo "=== EXIT CODE: $? ==="
-          echo "=== Looking for .app ==="
-          find build -name "Memoday.app" -type d 2>/dev/null | while read f; do
-            echo "FOUND: $f"
-            ls -la "$f/" | head -15
+          echo ""
+          echo "=========================================="
+          echo "EXIT CODE: $?"
+          echo "=========================================="
+          echo ""
+          echo "=== Searching for .app bundles ==="
+          find build -name "*.app" -type d 2>/dev/null | while read f; do
+            echo "--- Found: $f ---"
+            ls -la "$f/" 2>/dev/null || echo "(empty)"
+            echo "--- Checking for executables ---"
+            file "$f/Memoday" 2>/dev/null || echo "No 'Memoday' binary"
+            file "$f/"* 2>/dev/null || echo "No files at all"
+            # Also show recursive listing
+            find "$f" -type f 2>/dev/null | head -30
           done
 
       - name: Upload log
@@ -58,16 +58,29 @@ jobs:
       - name: Package IPA
         run: |
           APP_PATH=$(find ios-project/build -name "Memoday.app" -type d 2>/dev/null | head -1)
+          
           if [ -z "$APP_PATH" ]; then
-            echo "ERROR: .app not found"
-            find ios-project/build -type d 2>/dev/null | head -20
+            echo "ERROR: No .app found!"
             exit 1
           fi
-          echo "Using: $APP_PATH"
+          
+          echo "APP PATH: $APP_PATH"
+          echo "=== Contents ==="
+          ls -laR "$APP_PATH/" 2>&1 | head -40
+          
+          # Check binary exists
+          if [ ! -f "$APP_PATH/Memoday" ]; then
+            echo "WARNING: No Memoday binary! Looking for alternatives..."
+            find "$APP_PATH" -type f -perm +111 2>/dev/null | head -5
+            # Try finding any Mach-O binary
+            find "$APP_PATH" -type f -exec sh -c 'file "$1" | grep -q Mach' _ {} \; -print 2>/dev/null | head -5
+          fi
+          
           mkdir -p Payload
-          cp -r "$APP_PATH" Payload/
-          zip -r Memoday.ipa Payload
-          echo "IPA OK:"
+          cp -R "$APP_PATH" Payload/
+          zip -ry Memoday.ipa Payload
+          echo ""
+          echo "=== IPA created ==="
           ls -lh Memoday.ipa
 
       - name: Upload IPA
