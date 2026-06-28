@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="念念日历">
+  <meta name="theme-color" content="#7C3AED">
+  <title>念念日历 - 纪念日提醒</title>
+  <style>
+/* ===== 全局样式 ===== */
+:root {
+  --primary: #7C3AED;
+  --primary-light: #A78BFA;
+  --primary-dark: #6D28D9;
+  --primary-gradient: linear-gradient(135deg, #7C3AED 0%, #EC4899 100%);
+  --bg: #F5F5F7;
+  --card-bg: #FFFFFF;
+  --text: #1A1A2E;
+  --text-secondary: #6B7280;
+  --text-light: #9CA3AF;
+  --border: #E5E7EB;
+  --danger: #EF4444;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --shadow: 0 2px 12px rgba(0,0,0,0.06);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --tab-h: 64px;
+  --header-h: 56px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --c-birthday: #FF6B9D;
+  --c-anniversary: #A855F7;
+  --c-date: #F43F5E;
+  --c-important: #F59E0B;
+  --c-custom: #3B82F6;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0F0F1A;
+    --card-bg: #1E1E2E;
+    --text: #F1F1F5;
+    --text-secondary: #9CA3AF;
+    --text-light: #6B7280;
+    --border: #2D2D3F;
+    --shadow: 0 2px 12px rgba(0,0,0,0.3);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.4);
+  }
+}
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  height: 100%; overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 15px; color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased; user-select: none;
+}
+#app {
+  height: 100vh; height: 100dvh;
+  display: flex; flex-direction: column;
+  position: relative; max-width: 480px; margin: 0 auto;
+  background: var(--bg); box-shadow: 0 0 40px rgba(0,0,0,0.08);
+}
+.app-header {
+  height: var(--header-h); padding-top: var(--safe-top);
+  display: flex; align-items: center; justify-content: space-between;
+  padding-left: 20px; padding-right: 16px;
+  background: var(--card-bg); border-bottom: 1px solid var(--border);
+  position: relative; z-index: 10; flex-shrink: 0;
+}
+.header-title {
+  font-size: 20px; font-weight: 700;
+  background: var(--primary-gradient);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.header-action {
+  background: none; border: none; color: var(--primary);
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  padding: 8px; min-width: 40px; display: none;
+}
+.header-action:active { opacity: 0.6; }
+.app-content {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 20px);
+}
+.app-content::-webkit-scrollbar { width: 0; }
+.page { display: none; padding: 16px; animation: fadeIn 0.25s ease; }
+.page.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.tab-bar {
+  height: var(--tab-h); padding-bottom: var(--safe-bottom);
+  display: flex; background: var(--card-bg);
+  border-top: 1px solid var(--border);
+  position: relative; z-index: 10; flex-shrink: 0;
+}
+.tab-item {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px;
+  background: none; border: none; color: var(--text-light);
+  font-size: 11px; cursor: pointer; transition: color 0.2s; position: relative;
+}
+.tab-item svg { transition: transform 0.2s; }
+.tab-item.active { color: var(--primary); }
+.tab-item.active svg { transform: scale(1.1); }
+.tab-item::before {
+  content: ''; position: absolute; top: 0; width: 24px; height: 3px;
+  border-radius: 0 0 3px 3px; background: var(--primary);
+  transform: scaleX(0); transition: transform 0.25s;
+}
+.tab-item.active::before { transform: scaleX(1); }
+.fab {
+  position: fixed;
+  bottom: calc(var(--tab-h) + var(--safe-bottom) + 16px);
+  right: max(20px, calc(50% - 240px + 20px));
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--primary-gradient); border: none; color: white;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4);
+  z-index: 50; transition: transform 0.15s, box-shadow 0.15s;
+}
+.fab:active { transform: scale(0.9); box-shadow: 0 2px 8px rgba(124,58,237,0.3); }
+.hero-card {
+  background: var(--primary-gradient); border-radius: var(--radius);
+  padding: 24px 20px; color: white; margin-bottom: 16px;
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.2);
+  position: relative; overflow: hidden;
+}
+.hero-card::after { content: ''; position: absolute; top: -40px; right: -40px; width: 140px; height: 140px; border-radius: 50%; background: rgba(255,255,255,0.1); }
+.hero-card::before { content: ''; position: absolute; bottom: -30px; left: -30px; width: 100px; height: 100px; border-radius: 50%; background: rgba(255,255,255,0.08); }
+.hero-date { font-size: 14px; opacity: 0.85; margin-bottom: 4px; position: relative; z-index: 1; }
+.hero-title { font-size: 24px; font-weight: 700; position: relative; z-index: 1; }
+.hero-subtitle { font-size: 13px; opacity: 0.85; margin-top: 8px; position: relative; z-index: 1; }
+.hero-stats { display: flex; gap: 12px; margin-top: 16px; position: relative; z-index: 1; }
+.hero-stat { background: rgba(255,255,255,0.2); backdrop-filter: blur(8px); border-radius: var(--radius-sm); padding: 8px 14px; flex: 1; text-align: center; }
+.hero-stat-num { font-size: 22px; font-weight: 700; }
+.hero-stat-label { font-size: 11px; opacity: 0.85; }
+.section-title { font-size: 17px; font-weight: 700; margin: 20px 0 12px; display: flex; align-items: center; justify-content: space-between; }
+.section-title .count { font-size: 13px; font-weight: 400; color: var(--text-light); }
+.event-list { display: flex; flex-direction: column; gap: 10px; }
+.event-card {
+  background: var(--card-bg); border-radius: var(--radius-sm);
+  padding: 14px 16px; display: flex; align-items: center; gap: 14px;
+  box-shadow: var(--shadow); cursor: pointer; transition: transform 0.12s;
+  position: relative; overflow: hidden;
+}
+.event-card:active { transform: scale(0.97); }
+.event-card .event-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.event-bar.birthday { background: var(--c-birthday); }
+.event-bar.anniversary { background: var(--c-anniversary); }
+.event-bar.date { background: var(--c-date); }
+.event-bar.important { background: var(--c-important); }
+.event-bar.custom { background: var(--c-custom); }
+.event-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.event-icon.birthday { background: rgba(255,107,157,0.12); }
+.event-icon.anniversary { background: rgba(168,85,247,0.12); }
+.event-icon.date { background: rgba(244,63,94,0.12); }
+.event-icon.important { background: rgba(245,158,11,0.12); }
+.event-icon.custom { background: rgba(59,130,246,0.12); }
+.event-info { flex: 1; min-width: 0; }
+.event-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.event-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.event-note { font-size: 12px; color: var(--text-light); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.event-countdown { text-align: right; flex-shrink: 0; }
+.countdown-num { font-size: 18px; font-weight: 700; }
+.countdown-num.today { color: var(--danger); }
+.countdown-num.soon { color: var(--warning); }
+.countdown-label { font-size: 10px; color: var(--text-light); }
+.shared-badge { display: inline-flex; align-items: center; gap: 3px; background: rgba(124,58,237,0.1); color: var(--primary); font-size: 10px; padding: 2px 6px; border-radius: 6px; margin-left: 6px; font-weight: 500; }
+.empty-state { text-align: center; padding: 48px 20px; color: var(--text-light); }
+.empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+.empty-state .empty-text { font-size: 14px; }
+.calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.calendar-header .cal-title { font-size: 18px; font-weight: 700; }
+.cal-nav { display: flex; gap: 8px; }
+.cal-nav button { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border); background: var(--card-bg); cursor: pointer; font-size: 16px; color: var(--text); display: flex; align-items: center; justify-content: center; }
+.cal-nav button:active { background: var(--bg); }
+.calendar-grid { background: var(--card-bg); border-radius: var(--radius); padding: 12px 8px; box-shadow: var(--shadow); }
+.cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 8px; }
+.cal-weekdays span { text-align: center; font-size: 12px; color: var(--text-light); font-weight: 600; padding: 4px 0; }
+.cal-weekdays span:first-child, .cal-weekdays span:last-child { color: var(--c-date); }
+.cal-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-day { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; border-radius: 10px; position: relative; transition: background 0.15s; }
+.cal-day:active { background: var(--bg); }
+.cal-day.other-month { color: var(--text-light); opacity: 0.3; }
+.cal-day.today { background: var(--primary); color: white; font-weight: 700; }
+.cal-day.selected { background: rgba(124,58,237,0.15); font-weight: 600; }
+.cal-day.today.selected { background: var(--primary); }
+.cal-dots { display: flex; gap: 2px; position: absolute; bottom: 4px; }
+.cal-dot { width: 4px; height: 4px; border-radius: 50%; }
+.cal-dot.birthday { background: var(--c-birthday); }
+.cal-dot.anniversary { background: var(--c-anniversary); }
+.cal-dot.date { background: var(--c-date); }
+.cal-dot.important { background: var(--c-important); }
+.cal-dot.custom { background: var(--c-custom); }
+.cal-day.today .cal-dot { background: white !important; opacity: 0.8; }
+.day-events { margin-top: 16px; }
+.day-events-title { font-size: 15px; font-weight: 600; margin-bottom: 10px; color: var(--text-secondary); }
+.shared-card { background: var(--card-bg); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); margin-bottom: 12px; position: relative; overflow: hidden; }
+.shared-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--primary-gradient); }
+.shared-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.shared-card-icon { width: 40px; height: 40px; border-radius: 10px; background: var(--primary-gradient); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.shared-card-title { font-size: 16px; font-weight: 600; flex: 1; }
+.shared-card-code { font-size: 11px; color: var(--text-light); background: var(--bg); padding: 3px 8px; border-radius: 6px; font-family: monospace; }
+.shared-card-meta { font-size: 13px; color: var(--text-secondary); }
+.shared-card-members { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: var(--text-light); }
+.member-avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--primary-light); color: white; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; }
+.settings-group { background: var(--card-bg); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); margin-bottom: 16px; }
+.settings-item { display: flex; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border); cursor: pointer; gap: 12px; }
+.settings-item:last-child { border-bottom: none; }
+.settings-item:active { background: var(--bg); }
+.settings-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+.settings-label { flex: 1; font-size: 15px; }
+.settings-value { font-size: 13px; color: var(--text-light); }
+.settings-arrow { color: var(--text-light); font-size: 18px; }
+.toggle { width: 48px; height: 28px; border-radius: 14px; background: var(--border); position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
+.toggle.on { background: var(--primary); }
+.toggle::after { content: ''; position: absolute; width: 24px; height: 24px; border-radius: 50%; background: white; top: 2px; left: 2px; transition: left 0.2s; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+.toggle.on::after { left: 22px; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; z-index: 100; align-items: flex-end; justify-content: center; animation: overlayIn 0.2s ease; }
+.modal-overlay.show { display: flex; }
+@keyframes overlayIn { from { background: rgba(0,0,0,0); } to { background: rgba(0,0,0,0.4); } }
+.modal-sheet { background: var(--card-bg); width: 100%; max-width: 480px; border-radius: 24px 24px 0 0; max-height: 88vh; overflow-y: auto; animation: sheetUp 0.28s cubic-bezier(0.32, 0.72, 0, 1); padding-bottom: var(--safe-bottom); }
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sheet-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--border); margin: 8px auto 4px; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 20px 12px; }
+.modal-header h2 { font-size: 18px; font-weight: 700; }
+.modal-close { background: var(--bg); border: none; width: 32px; height: 32px; border-radius: 50%; font-size: 20px; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.modal-close:active { background: var(--border); }
+.modal-body { padding: 0 20px 24px; }
+.form-group { margin-bottom: 18px; }
+.form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; }
+.form-group input[type="text"], .form-group input[type="date"], .form-group select, .form-group textarea { width: 100%; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 15px; background: var(--bg); color: var(--text); font-family: inherit; transition: border-color 0.2s; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--primary); background: var(--card-bg); }
+.form-group textarea { resize: none; }
+.form-row { display: flex; gap: 12px; }
+.flex1 { flex: 1; }
+.type-selector { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.type-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); cursor: pointer; font-size: 11px; color: var(--text-secondary); transition: all 0.15s; }
+.type-btn .type-emoji { font-size: 22px; }
+.type-btn.active { border-color: var(--primary); background: rgba(124,58,237,0.08); color: var(--primary); }
+.reminder-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.check-chip { display: inline-flex; align-items: center; gap: 4px; padding: 8px 14px; border: 1.5px solid var(--border); border-radius: 20px; font-size: 13px; cursor: pointer; color: var(--text-secondary); transition: all 0.15s; position: relative; }
+.check-chip input { display: none; }
+.check-chip:has(input:checked) { border-color: var(--primary); background: rgba(124,58,237,0.08); color: var(--primary); font-weight: 600; }
+.form-actions { display: flex; gap: 12px; margin-top: 24px; }
+.btn-primary { background: var(--primary-gradient); color: white; border: none; padding: 14px 24px; border-radius: var(--radius-sm); font-size: 15px; font-weight: 600; cursor: pointer; flex: 1; transition: transform 0.12s; }
+.btn-primary:active { transform: scale(0.96); }
+.btn-secondary { background: var(--bg); color: var(--text-secondary); border: 1.5px solid var(--border); padding: 14px 24px; border-radius: var(--radius-sm); font-size: 15px; font-weight: 500; cursor: pointer; flex: 1; }
+.btn-secondary:active { background: var(--border); }
+.btn-block { width: 100%; margin-bottom: 10px; }
+.share-section h3 { font-size: 16px; margin-bottom: 6px; }
+.share-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5; }
+.share-divider { text-align: center; color: var(--text-light); font-size: 13px; margin: 20px 0; position: relative; }
+.share-divider::before, .share-divider::after { content: ''; position: absolute; top: 50%; width: 35%; height: 1px; background: var(--border); }
+.share-divider::before { left: 0; }
+.share-divider::after { right: 0; }
+.code-modal-body { text-align: center; }
+.code-tip { font-size: 14px; color: var(--text-secondary); margin-bottom: 16px; }
+.share-link-box { background: var(--bg); border: 2px dashed var(--primary-light); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; font-size: 12px; color: var(--text-secondary); word-break: break-all; line-height: 1.5; font-family: monospace; max-height: 80px; overflow-y: auto; }
+.invite-code-tag { font-size: 13px; color: var(--text-light); margin-bottom: 16px; }
+.invite-code-tag span { font-family: monospace; font-weight: 700; color: var(--primary); letter-spacing: 2px; }
+.toast { position: fixed; bottom: calc(var(--tab-h) + var(--safe-bottom) + 80px); left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(0,0,0,0.8); color: white; padding: 10px 24px; border-radius: 24px; font-size: 14px; z-index: 200; opacity: 0; pointer-events: none; transition: all 0.3s; white-space: nowrap; max-width: 90%; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.big-countdown { text-align: center; padding: 20px 0; }
+.big-countdown-num { font-size: 56px; font-weight: 800; background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; line-height: 1; }
+.big-countdown-label { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+.big-countdown-name { font-size: 18px; font-weight: 600; margin-top: 8px; }
+@media (min-width: 481px) { #app { border-radius: 0; } }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header class="app-header" id="appHeader">
+      <h1 class="header-title" id="headerTitle">念念日历</h1>
+      <button class="header-action" id="headerAction" aria-label="操作"></button>
+    </header>
+    <main class="app-content" id="appContent"></main>
+    <nav class="tab-bar" id="tabBar">
+      <button class="tab-item active" data-page="home">
+        <svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 3l9 8h-3v9h-4v-6h-4v6H6v-9H3l9-8z" fill="currentColor"/></svg>
+        <span>今日</span>
+      </button>
+      <button class="tab-item" data-page="calendar">
+        <svg viewBox="0 0 24 24" width="24" height="24"><path d="M7 2v2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2h-2V2h-2v2H9V2H7zm0 6h10v2H7V8z" fill="currentColor"/></svg>
+        <span>日历</span>
+      </button>
+      <button class="tab-item" data-page="shared">
+        <svg viewBox="0 0 24 24" width="24" height="24"><path d="M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 3-1.34 3-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.67 0-8 1.34-8 4v2h8v-2c0-.73.4-1.38 1-1.83-.6-.11-1.27-.17-1-.17zm8 0c-.27 0-.94.06-1.5.17.6.45 1 1.1 1 1.83v2h8v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/></svg>
+        <span>共享</span>
+      </button>
+      <button class="tab-item" data-page="settings">
+        <svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm0 6a2 2 0 110-4 2 2 0 010 4zm9-2c0-.7-.06-1.38-.18-2.04l2.11-1.65-2-3.46-2.49 1a7.5 7.5 0 00-3.5-2.02L14 1h-4l-.44 2.83a7.5 7.5 0 00-3.5 2.02l-2.49-1-2 3.46L3.7 12c-.12.66-.18 1.34-.18 2.04 0 .7.06 1.38.18 2.04L1.59 17.73l2 3.46 2.49-1c1.05.82 2.25 1.44 3.5 2.02L10 23h4l.44-2.83a7.5 7.5 0 003.5-2.02l2.49 1 2-3.46-2.11-1.65c.12-.66.18-1.34.18-2.04z" fill="currentColor"/></svg>
+        <span>我的</span>
+      </button>
+    </nav>
+    <button class="fab" id="fab" aria-label="添加事件">
+      <svg viewBox="0 0 24 24" width="28" height="28"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/></svg>
+    </button>
+  </div>
+
+  <div class="modal-overlay" id="eventModal">
+    <div class="modal-sheet">
+      <div class="sheet-handle"></div>
+      <div class="modal-header">
+        <h2 id="modalTitle">新建事件</h2>
+        <button class="modal-close" id="modalClose">&times;</button>
+      </div>
+      <form id="eventForm" class="modal-body">
+        <input type="hidden" id="eventId">
+        <div class="form-group">
+          <label>事件名称</label>
+          <input type="text" id="eventTitle" placeholder="给这个日子起个名字" required maxlength="30">
+        </div>
+        <div class="form-group">
+          <label>事件类型</label>
+          <div class="type-selector" id="typeSelector">
+            <button type="button" class="type-btn active" data-type="birthday" data-icon="🎂" data-label="生日"><span class="type-emoji">🎂</span><span>生日</span></button>
+            <button type="button" class="type-btn" data-type="anniversary" data-icon="💝" data-label="纪念日"><span class="type-emoji">💝</span><span>纪念日</span></button>
+            <button type="button" class="type-btn" data-type="date" data-icon="🌹" data-label="约会"><span class="type-emoji">🌹</span><span>约会</span></button>
+            <button type="button" class="type-btn" data-type="important" data-icon="⭐" data-label="重要"><span class="type-emoji">⭐</span><span>重要</span></button>
+            <button type="button" class="type-btn" data-type="custom" data-icon="📌" data-label="自定义"><span class="type-emoji">📌</span><span>自定义</span></button>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group flex1"><label>日期</label><input type="date" id="eventDate" required></div>
+          <div class="form-group" id="lunarGroup"><label>农历</label><select id="eventLunar"><option value="false">公历</option><option value="true">农历</option></select></div>
+        </div>
+        <div class="form-group"><label>重复</label><select id="eventRepeat"><option value="yearly">每年（生日/纪念日推荐）</option><option value="once">仅一次</option><option value="monthly">每月</option><option value="weekly">每周</option></select></div>
+        <div class="form-group">
+          <label>提前提醒</label>
+          <div class="reminder-options" id="reminderOptions">
+            <label class="check-chip"><input type="checkbox" value="0" checked><span>当天</span></label>
+            <label class="check-chip"><input type="checkbox" value="1" checked><span>提前1天</span></label>
+            <label class="check-chip"><input type="checkbox" value="3"><span>提前3天</span></label>
+            <label class="check-chip"><input type="checkbox" value="7"><span>提前7天</span></label>
+          </div>
+        </div>
+        <div class="form-group"><label>备注</label><textarea id="eventNote" placeholder="写点什么..." maxlength="200" rows="2"></textarea></div>
+        <div class="form-actions">
+          <button type="button" class="btn-secondary" id="btnDelete" style="display:none">删除</button>
+          <button type="submit" class="btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="shareModal">
+    <div class="modal-sheet">
+      <div class="sheet-handle"></div>
+      <div class="modal-header"><h2>共享纪念日</h2><button class="modal-close" id="shareModalClose">&times;</button></div>
+      <div class="modal-body">
+        <div class="share-section">
+          <h3>创建共享纪念日</h3>
+          <p class="share-desc">创建后会生成分享链接，发给好友打开即可加入。双方都会收到提醒通知 💞</p>
+          <button class="btn-primary btn-block" id="btnCreateShared">+ 创建共享纪念日</button>
+        </div>
+        <div class="share-divider"><span>好友邀请你加入？</span></div>
+        <div class="share-section"><p class="share-desc" style="text-align:center">请让好友把分享链接发给你<br>直接点击链接即可自动加入</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="codeModal">
+    <div class="modal-sheet">
+      <div class="sheet-handle"></div>
+      <div class="modal-header"><h2>分享给好友</h2><button class="modal-close" id="codeModalClose">&times;</button></div>
+      <div class="modal-body code-modal-body">
+        <p class="code-tip">把下方链接发给好友，TA打开即可加入共享纪念日</p>
+        <div class="share-link-box" id="shareLinkDisplay">-</div>
+        <div class="invite-code-tag" id="inviteCodeTag">邀请码：<span>------</span></div>
+        <button class="btn-primary btn-block" id="btnShareLink">分享链接给好友</button>
+        <button class="btn-secondary btn-block" id="btnCopyLink">复制链接</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="joinModal">
+    <div class="modal-sheet" style="max-width:360px;border-radius:24px;">
+      <div class="sheet-handle"></div>
+      <div class="modal-body" style="padding:20px 24px 24px;text-align:center;">
+        <div style="font-size:48px;margin-bottom:12px;">💌</div>
+        <h3 id="joinTitle" style="font-size:18px;margin-bottom:8px;">加入共享纪念日</h3>
+        <p id="joinDesc" style="font-size:14px;color:var(--text-secondary);margin-bottom:20px;line-height:1.6;">-</p>
+        <div class="form-actions" style="margin-top:0;">
+          <button class="btn-secondary" id="btnJoinCancel">取消</button>
+          <button class="btn-primary" id="btnJoinConfirm">加入</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal-sheet" style="max-width:340px;border-radius:24px;">
+      <div class="sheet-handle"></div>
+      <div class="modal-body" style="padding:20px 24px 24px;text-align:center;">
+        <div id="confirmIcon" style="font-size:40px;margin-bottom:12px;">⚠️</div>
+        <h3 id="confirmTitle" style="font-size:17px;margin-bottom:8px;">确认操作</h3>
+        <p id="confirmMsg" style="font-size:14px;color:var(--text-secondary);margin-bottom:20px;line-height:1.5;">-</p>
+        <div class="form-actions" style="margin-top:0;">
+          <button class="btn-secondary" id="btnConfirmCancel">取消</button>
+          <button class="btn-primary" id="btnConfirmOk" style="background:var(--danger);">确定</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+// ===== 念念日历 - 完全内联版 (无 ES Module) =====
+
+// ========== 数据存储层 ==========
+var STORAGE_KEYS = { events: 'memoday_events', shared: 'memoday_shared', profile: 'memoday_profile', settings: 'memoday_settings' };
+
+function loadData(key) {
+  try { var data = localStorage.getItem(key); return data ? JSON.parse(data) : null; }
+  catch(e) { return null; }
+}
+function saveData(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+  catch(e) { return false; }
+}
+
+function getAllEvents() { return (loadData(STORAGE_KEYS.events) || []).concat(getSharedEvents()); }
+function getPersonalEvents() { return loadData(STORAGE_KEYS.events) || []; }
+function saveEvent(event) {
+  var events = getPersonalEvents();
+  if (event.id) {
+    var idx = events.findIndex(function(e) { return e.id === event.id; });
+    if (idx >= 0) events[idx] = Object.assign({}, events[idx], event);
+    else events.push(event);
+  } else {
+    event.id = 'evt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    event.createdAt = Date.now();
+    events.push(event);
+  }
+  saveData(STORAGE_KEYS.events, events);
+  return event;
+}
+function deleteEvent(id) {
+  saveData(STORAGE_KEYS.events, getPersonalEvents().filter(function(e) { return e.id !== id; }));
+}
+function getEventById(id) { return getAllEvents().find(function(e) { return e.id === id; }); }
+
+function getSharedEvents() { return loadData(STORAGE_KEYS.shared) || []; }
+function createSharedEvent(eventData, ownerName) {
+  var shared = getSharedEvents();
+  var code = generateInviteCode();
+  var event = Object.assign({}, eventData, {
+    id: 'shr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+    isShared: true, inviteCode: code, owner: ownerName || '我',
+    members: [{ name: ownerName || '我', isOwner: true, joinedAt: Date.now() }],
+    createdAt: Date.now()
+  });
+  shared.push(event);
+  saveData(STORAGE_KEYS.shared, shared);
+  return event;
+}
+function deleteSharedEvent(id) { saveData(STORAGE_KEYS.shared, getSharedEvents().filter(function(e) { return e.id !== id; })); }
+function updateSharedEvent(id, updates) {
+  var shared = getSharedEvents();
+  var idx = shared.findIndex(function(e) { return e.id === id; });
+  if (idx >= 0) { shared[idx] = Object.assign({}, shared[idx], updates); saveData(STORAGE_KEYS.shared, shared); return shared[idx]; }
+  return null;
+}
+
+function getProfile() { return loadData(STORAGE_KEYS.profile) || { name: '我', avatar: '😊' }; }
+function saveProfile(profile) { saveData(STORAGE_KEYS.profile, profile); }
+function getSettings() { return loadData(STORAGE_KEYS.settings) || { notifications: true, sound: true, defaultReminder: [0, 1] }; }
+function saveSettings(settings) { saveData(STORAGE_KEYS.settings, settings); }
+
+function encodeShareData(event) {
+  var payload = { t: event.title, d: event.date, y: event.type, r: event.repeat || 'yearly', n: event.note || '', l: event.lunar ? true : false, m: event.reminders || [0, 1], o: event.owner || '好友', c: event.inviteCode || '' };
+  return btoa(encodeURIComponent(JSON.stringify(payload))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function decodeShareData(encoded) {
+  try {
+    var base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) base64 += '=';
+    var payload = JSON.parse(decodeURIComponent(atob(base64)));
+    return { title: payload.t, date: payload.d, type: payload.y, repeat: payload.r, note: payload.n, lunar: payload.l, reminders: payload.m, owner: payload.o, inviteCode: payload.c };
+  } catch(e) { return null; }
+}
+function importSharedEvent(data, myName) {
+  var shared = getSharedEvents();
+  if (data.inviteCode && shared.some(function(e) { return e.inviteCode === data.inviteCode; })) return { success: false, error: '你已经加入过这个纪念日了' };
+  var event = {
+    id: 'shr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+    title: data.title, date: data.date, type: data.type || 'anniversary', repeat: data.repeat || 'yearly',
+    note: data.note || '', lunar: data.lunar || false, reminders: data.reminders || [0, 1],
+    isShared: true, inviteCode: data.inviteCode || generateInviteCode(), owner: data.owner || '好友',
+    members: [
+      { name: data.owner || '好友', isOwner: true, joinedAt: Date.now() },
+      { name: myName || '我', isOwner: false, joinedAt: Date.now() }
+    ],
+    createdAt: Date.now()
+  };
+  shared.push(event);
+  saveData(STORAGE_KEYS.shared, shared);
+  return { success: true, event: event };
+}
+function generateShareLink(event) {
+  return window.location.origin + window.location.pathname + '?join=' + encodeShareData(event);
+}
+function generateInviteCode() {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var code = '';
+  for (var i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  if (getSharedEvents().some(function(e) { return e.inviteCode === code; })) return generateInviteCode();
+  return code;
+}
+
+// ========== 日期工具 ==========
+var EVENT_TYPES = {
+  birthday: { label: '生日', icon: '🎂', color: '#FF6B9D', cls: 'birthday' },
+  anniversary: { label: '纪念日', icon: '💝', color: '#A855F7', cls: 'anniversary' },
+  date: { label: '约会', icon: '🌹', color: '#F43F5E', cls: 'date' },
+  important: { label: '重要', icon: '⭐', color: '#F59E0B', cls: 'important' },
+  custom: { label: '自定义', icon: '📌', color: '#3B82F6', cls: 'custom' }
+};
+
+function formatDate(date, fmt) {
+  fmt = fmt || 'YYYY年MM月DD日';
+  if (typeof date === 'string') date = new Date(date);
+  if (!(date instanceof Date) || isNaN(date)) return '';
+  var y = date.getFullYear(), m = String(date.getMonth() + 1).padStart(2, '0'), d = String(date.getDate()).padStart(2, '0');
+  var weekdays = ['日','一','二','三','四','五','六'];
+  return fmt.replace('YYYY', y).replace('MM', m).replace('DD', d).replace('WW', weekdays[date.getDay()]);
+}
+function todayStr() { var t = new Date(); return t.getFullYear() + '-' + String(t.getMonth()+1).padStart(2,'0') + '-' + String(t.getDate()).padStart(2,'0'); }
+function parseDate(str) { if (!str) return null; var p = str.split('-'); return new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2])); }
+
+function daysUntilNext(event) {
+  var now = new Date(); now.setHours(0,0,0,0);
+  var eventDate = parseDate(event.date);
+  if (!eventDate) return null;
+  if (event.repeat === 'once') return Math.floor((eventDate - now) / 86400000);
+  var next = getNextOccurrence(event, now);
+  if (!next) return null;
+  return Math.floor((next - now) / 86400000);
+}
+function getNextOccurrence(event, fromDate) {
+  fromDate = fromDate || new Date(); fromDate.setHours(0,0,0,0);
+  var eventDate = parseDate(event.date);
+  if (!eventDate) return null;
+  if (event.repeat === 'once') return eventDate >= fromDate ? eventDate : null;
+  if (event.repeat === 'yearly') {
+    var year = fromDate.getFullYear();
+    var next = new Date(year, eventDate.getMonth(), eventDate.getDate());
+    if (next < fromDate) next = new Date(year + 1, eventDate.getMonth(), eventDate.getDate());
+    return next;
+  }
+  if (event.repeat === 'monthly') {
+    var year = fromDate.getFullYear(), month = fromDate.getMonth();
+    var next = new Date(year, month, eventDate.getDate());
+    if (next < fromDate) next = new Date(year, month + 1, eventDate.getDate());
+    return next;
+  }
+  if (event.repeat === 'weekly') {
+    var dayOfWeek = eventDate.getDay();
+    var next = new Date(fromDate);
+    var diff = (dayOfWeek - next.getDay() + 7) % 7;
+    if (diff === 0 && next.getTime() === fromDate.getTime()) return next;
+    next.setDate(next.getDate() + diff);
+    if (next < fromDate) next.setDate(next.getDate() + 7);
+    return next;
+  }
+  return eventDate;
+}
+function getEventsOnDate(events, dateStr) {
+  var date = parseDate(dateStr); if (!date) return [];
+  var result = [];
+  for (var i = 0; i < events.length; i++) {
+    var event = events[i];
+    var next = getNextOccurrence(event, date);
+    if (next) {
+      var nextStr = next.getFullYear() + '-' + String(next.getMonth()+1).padStart(2,'0') + '-' + String(next.getDate()).padStart(2,'0');
+      if (nextStr === dateStr) result.push(Object.assign({}, event, { nextDate: next }));
+    }
+    if (event.repeat === 'once' && event.date === dateStr) {
+      if (!result.find(function(r) { return r.id === event.id; })) result.push(Object.assign({}, event, { nextDate: date }));
+    }
+  }
+  return result;
+}
+function getEventDatesInMonth(events, year, month) {
+  var dates = new Set();
+  var lastDay = new Date(year, month + 1, 0);
+  for (var d = 1; d <= lastDay.getDate(); d++) {
+    var dateStr = year + '-' + String(month+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    if (getEventsOnDate(events, dateStr).length > 0) dates.add(d);
+  }
+  return dates;
+}
+function getEventTypeInfo(type) { return EVENT_TYPES[type] || EVENT_TYPES.custom; }
+function getTodayDisplay() {
+  var now = new Date();
+  var months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  var weekdays = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+  return now.getFullYear() + '年' + months[now.getMonth()] + now.getDate() + '日 ' + weekdays[now.getDay()];
+}
+function sortEventsByCountdown(events) {
+  return events.map(function(e) { return Object.assign({}, e, { _days: daysUntilNext(e) }); })
+    .filter(function(e) { return e._days !== null && e._days >= 0; })
+    .sort(function(a, b) { return a._days - b._days; });
+}
+function formatCountdown(days) {
+  if (days === 0) return { num: '今天', label: '就是今天', cls: 'today' };
+  if (days === 1) return { num: '1', label: '天后', cls: 'soon' };
+  if (days <= 7) return { num: String(days), label: '天后', cls: 'soon' };
+  return { num: String(days), label: '天后', cls: '' };
+}
+
+// ========== 通知系统 ==========
+function requestNotificationPermission() {
+  if (!('Notification' in window)) return Promise.resolve(false);
+  if (Notification.permission === 'granted') return Promise.resolve(true);
+  if (Notification.permission === 'denied') return Promise.resolve(false);
+  return Notification.requestPermission().then(function(r) { return r === 'granted'; });
+}
+function sendNotification(title, options) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  var settings = getSettings();
+  if (!settings.notifications) return;
+  try {
+    var notification = new Notification(title, {
+      body: options.body || '', icon: options.icon || '',
+      tag: options.tag || Date.now().toString(), requireInteraction: false, silent: !settings.sound
+    });
+    notification.onclick = function() { window.focus(); notification.close(); if (options.onClick) options.onClick(); };
+    setTimeout(function() { notification.close(); }, 8000);
+  } catch(e) {}
+}
+function checkReminders() {
+  var events = getAllEvents();
+  var settings = getSettings();
+  if (!settings.notifications) return;
+  var now = new Date(), today = new Date(now); today.setHours(0,0,0,0);
+  var tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+  var todayEvents = [], tomorrowEvents = [];
+  for (var i = 0; i < events.length; i++) {
+    var event = events[i];
+    var days = daysUntilNext(event);
+    if (days === null) continue;
+    var reminderDays = event.reminders || settings.defaultReminder || [0, 1];
+    for (var j = 0; j < reminderDays.length; j++) {
+      var rd = reminderDays[j];
+      if (days === rd) {
+        if (rd === 0) todayEvents.push(event);
+        else if (rd === 1) tomorrowEvents.push(event);
+        else {
+          var info = getEventTypeInfo(event.type);
+          sendNotification('【' + info.label + '提醒】' + event.title, {
+            body: '还有' + days + '天就是「' + event.title + '」了，别忘了准备哦！' + (event.note ? '\n备注：' + event.note : ''),
+            tag: 'reminder_' + event.id + '_' + days + 'd'
+          });
+        }
+      }
+    }
+  }
+  for (var i = 0; i < tomorrowEvents.length; i++) {
+    var event = tomorrowEvents[i], info = getEventTypeInfo(event.type);
+    sendNotification('【明天提醒】' + event.title, { body: '明天就是「' + event.title + '」啦！' + (event.note ? '\n' + event.note : ''), tag: 'reminder_' + event.id + '_1d' });
+  }
+  for (var i = 0; i < todayEvents.length; i++) {
+    var event = todayEvents[i], info = getEventTypeInfo(event.type);
+    sendNotification('【今天】' + event.title, { body: '今天是「' + event.title + '」🎉 ' + (event.note ? '\n' + event.note : ''), tag: 'reminder_' + event.id + '_0d' });
+  }
+  return { today: todayEvents.length, tomorrow: tomorrowEvents.length };
+}
+function getNotificationStatus() { if (!('Notification' in window)) return 'unsupported'; return Notification.permission; }
+var checkInterval = null;
+function startReminderCheck() {
+  try { checkReminders(); } catch(e) {}
+  if (checkInterval) clearInterval(checkInterval);
+  checkInterval = setInterval(function() { try { checkReminders(); } catch(e) {} }, 3600000);
+  document.addEventListener('visibilitychange', function() { if (!document.hidden) { try { checkReminders(); } catch(e) {} } });
+}
+function sendTestNotification() {
+  sendNotification('念念日历 🎉', { body: '通知功能已开启！重要纪念日会提前提醒你。', tag: 'test_notification' });
+}
+
+// ========== 主应用 ==========
+var currentPage = 'home';
+var editingEventId = null;
+var isSharedCreate = false;
+var selectedType = 'birthday';
+var calendarSelectedDate = null;
+var pendingJoinData = null;
+var confirmCallback = null;
+var currentShareEventTitle = '';
+var calState = { year: new Date().getFullYear(), month: new Date().getMonth(), selectedDate: todayStr() };
+
+window.setCalSelectedDate = function(date) { calendarSelectedDate = date; };
+
+function seedData() {
+  var existing = getPersonalEvents();
+  if (existing.length > 0) return;
+  var now = new Date(), y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+  var samples = [
+    { title: '妈妈的生日', date: fmt(y, m, d + 5), type: 'birthday', repeat: 'yearly', note: '记得提前订蛋糕', reminders: [0, 1, 3] },
+    { title: '在一起纪念日', date: fmt(y, m, d + 12), type: 'anniversary', repeat: 'yearly', note: '三年了，准备个惊喜', reminders: [0, 1, 7] },
+    { title: '周五约会', date: fmt(y, m, d + 2), type: 'date', repeat: 'weekly', note: '那家新开的餐厅', reminders: [0, 1] },
+    { title: '项目截止', date: fmt(y, m, d + 8), type: 'important', repeat: 'once', note: '最终交付', reminders: [0, 1, 3, 7] },
+    { title: '爸爸的生日', date: fmt(y, m, d + 20), type: 'birthday', repeat: 'yearly', reminders: [0, 1, 3] },
+    { title: '体检', date: fmt(y, m, d + 1), type: 'custom', repeat: 'once', note: '早上空腹', reminders: [0, 1] }
+  ];
+  for (var i = 0; i < samples.length; i++) saveEvent(samples[i]);
+}
+function fmt(y, m, d) { var date = new Date(y, m, d); return date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0') + '-' + String(date.getDate()).padStart(2,'0'); }
+
+function showConfirm(title, msg, onConfirm, icon) {
+  document.getElementById('confirmIcon').textContent = icon || '⚠️';
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMsg').textContent = msg;
+  confirmCallback = onConfirm;
+  document.getElementById('confirmModal').classList.add('show');
+}
+function closeConfirm() { document.getElementById('confirmModal').classList.remove('show'); confirmCallback = null; }
+
+function init() {
+  try {
+    seedData();
+    bindNavigation();
+    bindFab();
+    bindEventModal();
+    bindShareModal();
+    bindCodeModal();
+    bindJoinModal();
+    bindConfirmModal();
+    navigateTo('home');
+    try { startReminderCheck(); } catch(e) {}
+    try { checkUrlJoin(); } catch(e) {}
+    window.addEventListener('editevent', function(e) { openEventModal(e.detail); });
+  } catch(e) {
+    console.error('Init error:', e);
+  }
+}
+
+function checkUrlJoin() {
+  var params = new URLSearchParams(window.location.search);
+  var joinData = params.get('join');
+  if (!joinData) return;
+  var data = decodeShareData(joinData);
+  if (!data) { showToast('邀请链接无效'); return; }
+  var shared = getSharedEvents();
+  if (data.inviteCode && shared.some(function(e) { return e.inviteCode === data.inviteCode; })) {
+    showToast('你已经加入过这个纪念日了');
+    window.history.replaceState({}, '', window.location.pathname);
+    return;
+  }
+  pendingJoinData = data;
+  var info = getEventTypeInfo(data.type || 'anniversary');
+  document.getElementById('joinTitle').textContent = (data.owner || '好友') + ' 邀请你加入';
+  document.getElementById('joinDesc').innerHTML = info.icon + ' <strong>' + data.title + '</strong><br>日期：' + formatDate(data.date) + '<br>类型：' + info.label + '<br>加入后双方都会收到提醒通知 💞';
+  document.getElementById('joinModal').classList.add('show');
+  window.history.replaceState({}, '', window.location.pathname);
+}
+
+function bindNavigation() {
+  document.querySelectorAll('.tab-item').forEach(function(btn) {
+    btn.addEventListener('click', function() { navigateTo(btn.dataset.page); });
+  });
+}
+
+function navigateTo(page) {
+  currentPage = page;
+  document.querySelectorAll('.tab-item').forEach(function(btn) { btn.classList.toggle('active', btn.dataset.page === page); });
+  var headerTitle = document.getElementById('headerTitle');
+  var headerAction = document.getElementById('headerAction');
+  var fab = document.getElementById('fab');
+  switch (page) {
+    case 'home':
+      headerTitle.textContent = '念念日历'; headerAction.style.display = 'none'; fab.style.display = 'flex'; renderHome(); break;
+    case 'calendar':
+      headerTitle.textContent = '日历'; headerAction.style.display = 'none'; fab.style.display = 'flex'; renderCalendarView(); break;
+    case 'shared':
+      headerTitle.textContent = '共享纪念日'; headerAction.style.display = 'flex'; headerAction.textContent = '+'; fab.style.display = 'none'; renderSharedPage();
+      headerAction.onclick = function() { openShareModal(); }; break;
+    case 'settings':
+      headerTitle.textContent = '我的'; headerAction.style.display = 'none'; fab.style.display = 'none'; renderSettingsPage(); break;
+  }
+}
+
+function renderHome() {
+  var container = document.getElementById('appContent');
+  var events = getAllEvents();
+  var todayDisplay = getTodayDisplay();
+  var todayEvents = events.filter(function(e) { return daysUntilNext(e) === 0; });
+  var upcoming = sortEventsByCountdown(events).filter(function(e) { return e._days >= 0 && e._days <= 30; }).slice(0, 10);
+  var nextEvent = upcoming[0];
+  var totalEvents = events.length;
+  var thisMonthCount = events.filter(function(e) {
+    var next = getNextOccurrence(e); if (!next) return false;
+    var now = new Date(); return next.getMonth() === now.getMonth() && next.getFullYear() === now.getFullYear();
+  }).length;
+
+  var html = '<div class="page active"><div class="hero-card"><div class="hero-date">' + todayDisplay + '</div><div class="hero-title">' + getGreeting() + '</div><div class="hero-subtitle">' + (todayEvents.length > 0 ? '今天有 ' + todayEvents.length + ' 个重要日子' : '今天暂无安排，享受美好的一天') + '</div><div class="hero-stats"><div class="hero-stat"><div class="hero-stat-num">' + totalEvents + '</div><div class="hero-stat-label">总事件</div></div><div class="hero-stat"><div class="hero-stat-num">' + thisMonthCount + '</div><div class="hero-stat-label">本月</div></div><div class="hero-stat"><div class="hero-stat-num">' + todayEvents.length + '</div><div class="hero-stat-label">今天</div></div></div></div>';
+
+  if (nextEvent && nextEvent._days > 0) {
+    var info = getEventTypeInfo(nextEvent.type), cd = formatCountdown(nextEvent._days);
+    html += '<div class="big-countdown"><div class="big-countdown-num">' + cd.num + '</div><div class="big-countdown-label">天后</div><div class="big-countdown-name">' + info.icon + ' ' + nextEvent.title + '</div></div>';
+  }
+
+  html += '<div class="section-title">今日 · ' + todayEvents.length + '<span class="count">' + (todayEvents.length > 0 ? '别忘记哦' : '') + '</span></div>';
+  if (todayEvents.length === 0) {
+    html += '<div class="empty-state" style="padding:24px 12px"><div class="empty-icon">🌤️</div><div class="empty-text">今天没有安排，放松一下吧</div></div>';
+  } else {
+    html += '<div class="event-list">';
+    for (var i = 0; i < todayEvents.length; i++) html += renderEventCard(todayEvents[i], true);
+    html += '</div>';
+  }
+
+  html += '<div class="section-title">即将到来<span class="count">30天内</span></div>';
+  var upcomingFiltered = upcoming.filter(function(e) { return e._days > 0; });
+  if (upcomingFiltered.length === 0) {
+    html += '<div class="empty-state" style="padding:24px 12px"><div class="empty-icon">📅</div><div class="empty-text">30天内暂无事件</div></div>';
+  } else {
+    html += '<div class="event-list">';
+    for (var i = 0; i < upcomingFiltered.length; i++) html += renderEventCard(upcomingFiltered[i]);
+    html += '</div>';
+  }
+  html += '</div>';
+  container.innerHTML = html;
+  bindEventCardClicks(container);
+}
+
+function renderEventCard(event, isToday) {
+  var info = getEventTypeInfo(event.type);
+  var days = isToday ? 0 : event._days;
+  var cd = formatCountdown(days);
+  var sharedBadge = event.isShared ? '<span class="shared-badge">👥</span>' : '';
+  var repeatText = { yearly: '每年', once: '一次', monthly: '每月', weekly: '每周' }[event.repeat] || '每年';
+  return '<div class="event-card" data-id="' + event.id + '"><div class="event-bar ' + info.cls + '"></div><div class="event-icon ' + info.cls + '">' + info.icon + '</div><div class="event-info"><div class="event-name">' + event.title + sharedBadge + '</div><div class="event-meta">' + info.label + ' · ' + repeatText + (event.isShared ? ' · 共享' : '') + '</div>' + (event.note ? '<div class="event-note">' + event.note + '</div>' : '') + '</div><div class="event-countdown"><div class="countdown-num ' + cd.cls + '">' + cd.num + '</div><div class="countdown-label">' + cd.label + '</div></div></div>';
+}
+
+function bindEventCardClicks(container) {
+  container.querySelectorAll('.event-card').forEach(function(el) {
+    el.addEventListener('click', function() { window.dispatchEvent(new CustomEvent('editevent', { detail: el.dataset.id })); });
+  });
+}
+
+function getGreeting() {
+  var h = new Date().getHours();
+  if (h < 6) return '夜深了，早点休息';
+  if (h < 12) return '早上好，新的一天';
+  if (h < 14) return '中午好，记得吃饭';
+  if (h < 18) return '下午好，继续加油';
+  if (h < 22) return '晚上好，放松一下';
+  return '夜深了，注意休息';
+}
+
+function renderSharedPage() {
+  var container = document.getElementById('appContent');
+  var sharedEvents = getSharedEvents();
+  var html = '<div class="page active"><div class="hero-card" style="background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);"><div class="hero-title">共享纪念日</div><div class="hero-subtitle">邀请好友一起记录属于你们的重要日子</div><div class="hero-subtitle" style="margin-top:6px">双方都会收到提醒通知 💞</div></div>';
+  if (sharedEvents.length === 0) {
+    html += '<div class="empty-state"><div class="empty-icon">💌</div><div class="empty-text">还没有共享纪念日</div><div class="empty-text" style="margin-top:8px;font-size:12px">点击右上角 + 创建</div></div>';
+  } else {
+    html += '<div class="section-title">共享列表 · ' + sharedEvents.length + '</div>';
+    for (var i = 0; i < sharedEvents.length; i++) {
+      var event = sharedEvents[i], info = getEventTypeInfo(event.type), days = daysUntilNext(event);
+      var members = event.members || [];
+      var memberBadges = members.map(function(m) { return '<div class="member-avatar" style="' + (m.isOwner ? 'background:var(--primary);' : '') + '">' + (m.name || '?').charAt(0) + '</div>'; }).join('');
+      var daysText = days === 0 ? '就是今天🎉' : (days !== null ? '还有' + days + '天' : '已过');
+      html += '<div class="shared-card" data-id="' + event.id + '"><div class="shared-card-header"><div class="shared-card-icon">' + info.icon + '</div><div class="shared-card-title">' + event.title + '</div><div class="shared-card-code">' + event.inviteCode + '</div></div><div class="shared-card-meta">' + info.label + ' · ' + formatDate(event.date) + ' · ' + daysText + '</div>' + (event.note ? '<div class="shared-card-meta" style="margin-top:4px;color:var(--text-light)">' + event.note + '</div>' : '') + '<div class="shared-card-members">' + memberBadges + '<span>' + members.map(function(m) { return m.name; }).join('、') + '</span></div><button class="btn-secondary btn-block share-again-btn" data-id="' + event.id + '" style="margin-top:10px;font-size:13px;padding:8px;">📤 再次分享链接</button></div>';
+    }
+  }
+  html += '</div>';
+  container.innerHTML = html;
+  container.querySelectorAll('.shared-card').forEach(function(el) {
+    el.addEventListener('click', function(e) {
+      if (e.target.classList.contains('share-again-btn')) {
+        e.stopPropagation();
+        var event = getEventById(el.dataset.id);
+        if (event) showShareLink(event);
+        return;
+      }
+      openEventModal(el.dataset.id);
+    });
+  });
+}
+
+function renderSettingsPage() {
+  var container = document.getElementById('appContent');
+  var profile = getProfile(), settings = getSettings(), notifStatus = getNotificationStatus();
+  var totalEvents = getAllEvents().length;
+  var notifText = { granted: '已开启', denied: '已拒绝', unsupported: '不支持', default: '未开启' }[notifStatus] || '未开启';
+  container.innerHTML = '<div class="page active"><div class="hero-card" style="text-align:center;padding:28px 20px;"><div style="font-size:56px;margin-bottom:8px;">' + profile.avatar + '</div><div class="hero-title" style="font-size:22px;">' + profile.name + '</div><div class="hero-subtitle">已记录 ' + totalEvents + ' 个重要日子</div></div><div class="settings-group"><div class="settings-item" id="settingNotif"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">🔔</div><div class="settings-label">通知提醒</div><div class="settings-value">' + notifText + '</div><div class="toggle ' + (settings.notifications ? 'on' : '') + '"></div></div><div class="settings-item" id="settingSound"><div class="settings-icon" style="background:rgba(245,158,11,0.1)">🔊</div><div class="settings-label">提醒声音</div><div class="toggle ' + (settings.sound ? 'on' : '') + '"></div></div><div class="settings-item" id="settingTest"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📋</div><div class="settings-label">发送测试通知</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item" id="settingName"><div class="settings-icon" style="background:rgba(59,130,246,0.1)">👤</div><div class="settings-label">我的昵称</div><div class="settings-value">' + profile.name + '</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingAvatar"><div class="settings-icon" style="background:rgba(255,107,157,0.1)">😊</div><div class="settings-label">我的头像</div><div class="settings-value">' + profile.avatar + '</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item" id="settingInstall" style="cursor:pointer;"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📱</div><div class="settings-label">安装到手机桌面</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingExport"><div class="settings-icon" style="background:rgba(168,85,247,0.1)">📤</div><div class="settings-label">导出数据</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingClear"><div class="settings-icon" style="background:rgba(239,68,68,0.1)">🗑️</div><div class="settings-label" style="color:var(--danger)">清空所有数据</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">📱</div><div class="settings-label">版本</div><div class="settings-value">v1.1.0</div></div><div class="settings-item"><div class="settings-icon" style="background:rgba(244,63,94,0.1)">💝</div><div class="settings-label">念念日历</div><div class="settings-value">念念不忘的日子</div></div></div></div>';
+  bindSettingsEvents(settings, profile);
+}
+
+function bindSettingsEvents(settings, profile) {
+  document.getElementById('settingNotif').addEventListener('click', function() {
+    if (!settings.notifications) {
+      requestNotificationPermission().then(function(granted) {
+        if (granted) { settings.notifications = true; saveSettings(settings); showToast('通知已开启'); }
+        else { showToast('请在浏览器设置中允许通知'); }
+        renderSettingsPage();
+      });
+    } else { settings.notifications = !settings.notifications; saveSettings(settings); renderSettingsPage(); }
+  });
+  document.getElementById('settingSound').addEventListener('click', function() { settings.sound = !settings.sound; saveSettings(settings); renderSettingsPage(); });
+  document.getElementById('settingTest').addEventListener('click', function() {
+    if (getNotificationStatus() !== 'granted') { showToast('请先开启通知权限'); return; }
+    sendTestNotification(); showToast('测试通知已发送');
+  });
+  document.getElementById('settingName').addEventListener('click', function() {
+    var name = prompt('输入你的昵称', profile.name);
+    if (name && name.trim()) { profile.name = name.trim(); saveProfile(profile); showToast('已保存'); renderSettingsPage(); }
+  });
+  document.getElementById('settingAvatar').addEventListener('click', function() {
+    var input = prompt('输入一个 emoji 作为头像', profile.avatar);
+    if (input && input.trim()) { profile.avatar = input.trim().charAt(0); saveProfile(profile); showToast('已保存'); renderSettingsPage(); }
+  });
+  document.getElementById('settingInstall').addEventListener('click', function() { showToast('请通过浏览器分享菜单添加到主屏幕'); });
+  document.getElementById('settingExport').addEventListener('click', function() {
+    var data = { events: getPersonalEvents(), shared: getSharedEvents(), profile: getProfile(), settings: getSettings(), exportedAt: new Date().toISOString() };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob); var a = document.createElement('a');
+    a.href = url; a.download = '念念日历_备份_' + todayStr() + '.json'; a.click(); URL.revokeObjectURL(url);
+    showToast('数据已导出');
+  });
+  document.getElementById('settingClear').addEventListener('click', function() {
+    showConfirm('清空所有数据', '确定要清空所有纪念日和事件吗？此操作不可撤销！', function() {
+      localStorage.removeItem('memoday_events'); localStorage.removeItem('memoday_shared');
+      showToast('数据已清空'); renderSettingsPage();
+    }, '🗑️');
+  });
+}
+
+function bindFab() {
+  document.getElementById('fab').addEventListener('click', function() {
+    var presetDate = currentPage === 'calendar' ? calendarSelectedDate : null;
+    openEventModal(null, presetDate);
+  });
+}
+
+function bindEventModal() {
+  var modal = document.getElementById('eventModal');
+  document.getElementById('modalClose').addEventListener('click', closeEventModal);
+  modal.addEventListener('click', function(e) { if (e.target === modal) closeEventModal(); });
+  document.querySelectorAll('.type-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.type-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active'); selectedType = btn.dataset.type;
+    });
+  });
+  document.getElementById('eventForm').addEventListener('submit', function(e) { e.preventDefault(); handleEventSave(); });
+  document.getElementById('btnDelete').addEventListener('click', function() {
+    if (!editingEventId) return;
+    var event = getEventById(editingEventId); if (!event) return;
+    showConfirm('删除事件', '确定要删除「' + event.title + '」吗？' + (event.isShared ? '删除后你将不再收到此共享纪念日的提醒。' : '此操作不可撤销。'), function() {
+      if (event.isShared) deleteSharedEvent(editingEventId); else deleteEvent(editingEventId);
+      closeEventModal(); showToast('已删除'); refreshCurrentPage();
+    }, '🗑️');
+  });
+}
+
+function openEventModal(eventId, presetDate) {
+  editingEventId = eventId; isSharedCreate = false;
+  var modal = document.getElementById('eventModal'), modalTitle = document.getElementById('modalTitle'), deleteBtn = document.getElementById('btnDelete');
+  if (eventId) {
+    var event = getEventById(eventId); if (!event) return;
+    modalTitle.textContent = event.isShared ? '编辑共享纪念日' : '编辑事件';
+    deleteBtn.style.display = 'block';
+    document.getElementById('eventId').value = event.id;
+    document.getElementById('eventTitle').value = event.title;
+    document.getElementById('eventDate').value = event.date;
+    document.getElementById('eventLunar').value = event.lunar ? 'true' : 'false';
+    document.getElementById('eventRepeat').value = event.repeat || 'yearly';
+    document.getElementById('eventNote').value = event.note || '';
+    selectedType = event.type;
+    document.querySelectorAll('.type-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.type === event.type); });
+    var reminders = event.reminders || [0, 1];
+    document.querySelectorAll('#reminderOptions input').forEach(function(input) { input.checked = reminders.includes(parseInt(input.value)); });
+  } else {
+    modalTitle.textContent = '新建事件'; deleteBtn.style.display = 'none';
+    document.getElementById('eventId').value = '';
+    document.getElementById('eventForm').reset();
+    document.getElementById('eventDate').value = presetDate || todayStr();
+    document.getElementById('eventRepeat').value = 'yearly';
+    selectedType = 'birthday';
+    document.querySelectorAll('.type-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.type === 'birthday'); });
+    var settings = getSettings(), defaultReminder = settings.defaultReminder || [0, 1];
+    document.querySelectorAll('#reminderOptions input').forEach(function(input) { input.checked = defaultReminder.includes(parseInt(input.value)); });
+  }
+  modal.classList.add('show');
+}
+
+function closeEventModal() { document.getElementById('eventModal').classList.remove('show'); editingEventId = null; isSharedCreate = false; }
+
+function handleEventSave() {
+  var id = document.getElementById('eventId').value;
+  var title = document.getElementById('eventTitle').value.trim();
+  var date = document.getElementById('eventDate').value;
+  var repeat = document.getElementById('eventRepeat').value;
+  var note = document.getElementById('eventNote').value.trim();
+  var lunar = document.getElementById('eventLunar').value === 'true';
+  var reminders = [];
+  document.querySelectorAll('#reminderOptions input:checked').forEach(function(input) { reminders.push(parseInt(input.value)); });
+  if (!title || !date) { showToast('请填写事件名称和日期'); return; }
+  var eventData = { title: title, date: date, type: selectedType, repeat: repeat, note: note, lunar: lunar, reminders: reminders };
+  if (isSharedCreate) {
+    var profile = getProfile();
+    var event = createSharedEvent(eventData, profile.name);
+    closeEventModal(); showToast('共享纪念日已创建'); showShareLink(event); refreshCurrentPage(); return;
+  }
+  if (id) {
+    var existing = getEventById(id);
+    if (existing && existing.isShared) updateSharedEvent(id, eventData);
+    else saveEvent(Object.assign({ id: id }, eventData));
+    showToast('已保存');
+  } else { saveEvent(eventData); showToast('已创建'); }
+  closeEventModal(); refreshCurrentPage(); try { checkReminders(); } catch(e) {}
+}
+
+function bindShareModal() {
+  var modal = document.getElementById('shareModal');
+  document.getElementById('shareModalClose').addEventListener('click', function() { modal.classList.remove('show'); });
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.classList.remove('show'); });
+  document.getElementById('btnCreateShared').addEventListener('click', function() { modal.classList.remove('show'); openSharedEventModal(); });
+}
+function openShareModal() { document.getElementById('shareModal').classList.add('show'); }
+function openSharedEventModal() {
+  isSharedCreate = true;
+  var modal = document.getElementById('eventModal');
+  document.getElementById('modalTitle').textContent = '创建共享纪念日';
+  document.getElementById('btnDelete').style.display = 'none';
+  document.getElementById('eventId').value = '';
+  document.getElementById('eventForm').reset();
+  document.getElementById('eventDate').value = todayStr();
+  document.getElementById('eventRepeat').value = 'yearly';
+  selectedType = 'anniversary';
+  document.querySelectorAll('.type-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.type === 'anniversary'); });
+  var settings = getSettings(), defaultReminder = settings.defaultReminder || [0, 1];
+  document.querySelectorAll('#reminderOptions input').forEach(function(input) { input.checked = defaultReminder.includes(parseInt(input.value)); });
+  modal.classList.add('show');
+}
+
+function bindCodeModal() {
+  var modal = document.getElementById('codeModal');
+  document.getElementById('codeModalClose').addEventListener('click', function() { modal.classList.remove('show'); });
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.classList.remove('show'); });
+  document.getElementById('btnShareLink').addEventListener('click', function() {
+    var link = document.getElementById('shareLinkDisplay').textContent;
+    var profile = getProfile();
+    var text = profile.name + ' 邀请你一起记录纪念日「' + currentShareEventTitle + '」💞\n点击链接加入：\n' + link;
+    if (navigator.share) navigator.share({ title: '念念日历邀请', text: text, url: link });
+    else if (navigator.clipboard) navigator.clipboard.writeText(text).then(function() { showToast('邀请信息已复制，去发给好友吧'); });
+  });
+  document.getElementById('btnCopyLink').addEventListener('click', function() {
+    var link = document.getElementById('shareLinkDisplay').textContent;
+    if (navigator.clipboard) navigator.clipboard.writeText(link).then(function() { showToast('链接已复制'); });
+    else showToast('请手动长按复制链接');
+  });
+}
+
+function showShareLink(event) {
+  currentShareEventTitle = event.title;
+  var link = generateShareLink(event);
+  document.getElementById('shareLinkDisplay').textContent = link;
+  document.getElementById('inviteCodeTag').innerHTML = '邀请码：<span>' + event.inviteCode + '</span>';
+  document.getElementById('codeModal').classList.add('show');
+}
+
+function bindJoinModal() {
+  var modal = document.getElementById('joinModal');
+  document.getElementById('btnJoinCancel').addEventListener('click', function() { modal.classList.remove('show'); pendingJoinData = null; });
+  modal.addEventListener('click', function(e) { if (e.target === modal) { modal.classList.remove('show'); pendingJoinData = null; } });
+  document.getElementById('btnJoinConfirm').addEventListener('click', function() {
+    if (!pendingJoinData) return;
+    var profile = getProfile();
+    var result = importSharedEvent(pendingJoinData, profile.name);
+    modal.classList.remove('show');
+    if (result.success) { showToast('加入成功！双方都会收到提醒 💞'); navigateTo('shared'); }
+    else showToast(result.error);
+    pendingJoinData = null;
+  });
+}
+
+function bindConfirmModal() {
+  var modal = document.getElementById('confirmModal');
+  document.getElementById('btnConfirmCancel').addEventListener('click', closeConfirm);
+  document.getElementById('btnConfirmOk').addEventListener('click', function() { var cb = confirmCallback; closeConfirm(); if (cb) cb(); });
+  modal.addEventListener('click', function(e) { if (e.target === modal) closeConfirm(); });
+}
+
+function showToast(msg) {
+  var toast = document.getElementById('toast');
+  toast.textContent = msg; toast.classList.add('show');
+  setTimeout(function() { toast.classList.remove('show'); }, 2500);
+}
+function refreshCurrentPage() { navigateTo(currentPage); }
+
+// ========== 日历视图 ==========
+function renderCalendarView() {
+  var container = document.getElementById('appContent');
+  container.innerHTML = '<div class="page active"><div class="calendar-header"><div class="cal-title">' + calState.year + '年' + (calState.month + 1) + '月</div><div class="cal-nav"><button id="calPrev">‹</button><button id="calToday">今</button><button id="calNext">›</button></div></div><div class="calendar-grid"><div class="cal-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div><div class="cal-days" id="calDays"></div></div><div class="day-events" id="dayEvents"></div></div>';
+  renderCalendarDays(); renderDayEvents();
+  document.getElementById('calPrev').addEventListener('click', function() { calState.month--; if (calState.month < 0) { calState.month = 11; calState.year--; } renderCalendarView(); });
+  document.getElementById('calNext').addEventListener('click', function() { calState.month++; if (calState.month > 11) { calState.month = 0; calState.year++; } renderCalendarView(); });
+  document.getElementById('calToday').addEventListener('click', function() { var now = new Date(); calState.year = now.getFullYear(); calState.month = now.getMonth(); calState.selectedDate = todayStr(); renderCalendarView(); });
+}
+
+function renderCalendarDays() {
+  var daysContainer = document.getElementById('calDays');
+  var events = getAllEvents(), today = todayStr();
+  var firstDay = new Date(calState.year, calState.month, 1);
+  var lastDay = new Date(calState.year, calState.month + 1, 0);
+  var startWeekday = firstDay.getDay(), daysInMonth = lastDay.getDate();
+  var prevMonthLastDay = new Date(calState.year, calState.month, 0).getDate();
+  var html = '';
+  for (var i = startWeekday - 1; i >= 0; i--) html += '<div class="cal-day other-month">' + (prevMonthLastDay - i) + '</div>';
+  var eventDates = getEventDatesInMonth(events, calState.year, calState.month);
+  for (var d = 1; d <= daysInMonth; d++) {
+    var dateStr = calState.year + '-' + String(calState.month+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    var isSelected = dateStr === calState.selectedDate, isToday = dateStr === today;
+    var dotsHtml = '';
+    if (eventDates.has(d)) {
+      var dayEvents = getEventsOnDate(events, dateStr);
+      var types = []; for (var j = 0; j < dayEvents.length; j++) { if (types.indexOf(dayEvents[j].type) === -1) types.push(dayEvents[j].type); } types = types.slice(0, 3);
+      dotsHtml = '<div class="cal-dots">' + types.map(function(t) { return '<span class="cal-dot ' + getEventTypeInfo(t).cls + '"></span>'; }).join('') + '</div>';
+    }
+    var classes = ['cal-day']; if (isToday) classes.push('today'); if (isSelected) classes.push('selected');
+    html += '<div class="' + classes.join(' ') + '" data-date="' + dateStr + '">' + d + dotsHtml + '</div>';
+  }
+  var totalCells = startWeekday + daysInMonth, remaining = (7 - (totalCells % 7)) % 7;
+  for (var i = 1; i <= remaining; i++) html += '<div class="cal-day other-month">' + i + '</div>';
+  daysContainer.innerHTML = html;
+  daysContainer.querySelectorAll('.cal-day[data-date]').forEach(function(el) {
+    el.addEventListener('click', function() {
+      calState.selectedDate = el.dataset.date;
+      if (window.setCalSelectedDate) window.setCalSelectedDate(el.dataset.date);
+      renderCalendarDays(); renderDayEvents();
+    });
+  });
+}
+
+function renderDayEvents() {
+  var container = document.getElementById('dayEvents');
+  var events = getAllEvents(), date = calState.selectedDate;
+  var dayEvents = getEventsOnDate(events, date);
+  var dateDisplay = formatDate(date, 'MM月DD日 星期WW');
+  var html = '<div class="day-events-title">' + dateDisplay + ' · ' + dayEvents.length + '个事件</div>';
+  if (dayEvents.length === 0) {
+    html += '<div class="empty-state" style="padding:24px 12px"><div class="empty-text">这一天还没有事件</div><div class="empty-text" style="margin-top:8px;font-size:12px">点击右下角 + 添加</div></div>';
+  } else {
+    html += '<div class="event-list">';
+    for (var i = 0; i < dayEvents.length; i++) {
+      var event = dayEvents[i], info = getEventTypeInfo(event.type);
+      var sharedBadge = event.isShared ? '<span class="shared-badge">👥 共享</span>' : '';
+      var memberInfo = event.isShared && event.members ? ' · ' + event.members.length + '人共享' : '';
+      html += '<div class="event-card" data-id="' + event.id + '"><div class="event-bar ' + info.cls + '"></div><div class="event-icon ' + info.cls + '">' + info.icon + '</div><div class="event-info"><div class="event-name">' + event.title + sharedBadge + '</div><div class="event-meta">' + info.label + memberInfo + '</div>' + (event.note ? '<div class="event-note">' + event.note + '</div>' : '') + '</div><div class="event-countdown"><div class="countdown-num today">今天</div></div></div>';
+    }
+    html += '</div>';
+  }
+  container.innerHTML = html;
+  container.querySelectorAll('.event-card').forEach(function(el) {
+    el.addEventListener('click', function() { window.dispatchEvent(new CustomEvent('editevent', { detail: el.dataset.id })); });
+  });
+}
+
+// ========== 启动 ==========
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+  </script>
+</body>
+</html>

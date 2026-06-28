@@ -15,39 +15,44 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
 class ViewController: UIViewController, WKNavigationDelegate {
     var webView: WKWebView!
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = UIColor(red: 0.95, green: 0.96, blue: 0.98, alpha: 1)
-        title = "\u5FF5\u5FF5\u65E5\u5386"
+
         let cfg = WKWebViewConfiguration()
         cfg.allowsInlineMediaPlayback = true
         cfg.defaultWebpagePreferences?.allowsContentJavaScript = true
         cfg.preferences.javaScriptEnabled = true
+        cfg.preferences.javaScriptCanOpenWindowsAutomatically = true
+
         webView = WKWebView(frame: view.bounds, configuration: cfg)
         webView.navigationDelegate = self
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         webView.scrollView.bounces = false
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.isOpaque = false
+        webView.backgroundColor = UIColor(red: 0.95, green: 0.96, blue: 0.98, alpha: 1)
         view.addSubview(webView)
+
         loadContent()
     }
 
     func loadContent() {
-        let onlineURL = URL(string: "https://772e2c5c13b4487d91faaa869468fee5.app.codebuddy.work/")
-        if let url = onlineURL {
-            var req = URLRequest(url: url)
-            req.cachePolicy = .reloadIgnoringLocalCacheData
-            webView.load(req)
-        } else if let u = Bundle.main.url(forResource: "index", withExtension: "html") {
-            webView.loadFileURL(u, allowingReadAccessTo: u.deletingLastPathComponent())
+        if let htmlURL = Bundle.main.url(forResource: "standalone", withExtension: "html") {
+            let dir = htmlURL.deletingLastPathComponent()
+            webView.loadFileURL(htmlURL, allowingReadAccessTo: dir)
         }
     }
 
-    func webView(_: WKWebView, didFinish _: WKNavigation?) {}
-    func webView(_: WKWebView, didFail _: WKNavigation?, withError error: Error) {
-        print("WebView load error: \(error.localizedDescription)")
-        if let u = Bundle.main.url(forResource: "index", withExtension: "html") {
-            webView.loadFileURL(u, allowingReadAccessTo: u.deletingLastPathComponent())
-        }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        let js = "document.documentElement.style.webkitUserSelect='none';document.documentElement.style.webkitTouchCallout='none';"
+        webView.evaluateJavaScript(js, completionHandler: nil)
     }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        print("WebView load error: \(error.localizedDescription)")
+    }
+
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 }

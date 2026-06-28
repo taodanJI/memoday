@@ -18,6 +18,7 @@
 		D1000004149A0B2B00000001 /* notify.js in Resources */ = {isa = PBXBuildFile; fileRef = D2000004149A0B2B00000001 /* notify.js */; };
 		D1000005149A0B2B00000001 /* utils.js in Resources */ = {isa = PBXBuildFile; fileRef = D2000005149A0B2B00000001 /* utils.js */; };
 		D1000006149A0B2B00000001 /* bundle.js in Resources */ = {isa = PBXBuildFile; fileRef = D2000006149A0B2B00000001 /* bundle.js */; };
+		E1000001149A0B2B00000001 /* standalone.html in Resources */ = {isa = PBXBuildFile; fileRef = E2000001149A0B2B00000001 /* standalone.html */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +35,7 @@
 		D2000004149A0B2B00000001 /* notify.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = notify.js; sourceTree = "<group>"; };
 		D2000005149A0B2B00000001 /* utils.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = utils.js; sourceTree = "<group>"; };
 		D2000006149A0B2B00000001 /* bundle.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = bundle.js; sourceTree = "<group>"; };
+		E2000001149A0B2B00000001 /* standalone.html */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.html; path = standalone.html; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -66,6 +68,7 @@
 				B4000001149A0B2B00000001 /* AppDelegate.swift */,
 				B4500001149A0B2B00000001 /* Info.plist */,
 				B5000001149A0B2B00000002 /* Assets.xcassets */,
+				E2000001149A0B2B00000001 /* standalone.html */,
 				B6000001149A0B2B00000001 /* index.html */,
 				B7000001149A0B2B00000001 /* style.css */,
 				B8000001149A0B2B00000001 /* sw.js */,
@@ -143,6 +146,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B3000001149A0B2B00000002 /* Assets.xcassets in Resources */,
+				E1000001149A0B2B00000001 /* standalone.html in Resources */,
 				B3000001149A0B2B00000003 /* index.html in Resources */,
 				B3000001149A0B2B00000004 /* style.css in Resources */,
 				B3000001149A0B2B00000005 /* sw.js in Resources */,
