@@ -1,4 +1,4 @@
-name: Build iOS IPA (WebView)
+name: Build iOS IPA
 
 on:
   workflow_dispatch:
@@ -11,158 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create App
+      - name: Install xcodegen
+        run: brew install xcodegen 2>/dev/null || true
+
+      - name: Generate & Build
         run: |
-          # 创建目录结构
-          mkdir -p Memoday/MemodayApp/Base.lproj
-          cd Memoday
-
-          # Info.plist 用 Python 写入避免 heredoc 问题
-          python3 -c "
-import plistlib
-info = {
-    'CFBundleDevelopmentRegion': 'zh_CN',
-    'CFBundleDisplayName': '念念日历',
-    'CFBundleExecutable': 'Memoday',
-    'CFBundleIdentifier': 'com.memoday.app',
-    'CFBundleInfoDictionaryVersion': '6.0',
-    'CFBundleName': 'Memoday',
-    'CFBundlePackageType': 'APPL',
-    'CFBundleShortVersionString': '1.0.0',
-    'CFBundleVersion': '1',
-    'LSRequiresIPhoneOS': True,
-    'UILaunchStoryboardName': 'LaunchScreen',
-    'UIRequiredDeviceCapabilities': ['armv7'],
-    'UISupportedInterfaceOrientations': ['UIInterfaceOrientationPortrait','UIInterfaceOrientationLandscapeLeft','UIInterfaceOrientationLandscapeRight'],
-    'NSAppTransportSecurity': {'NSAllowsArbitraryLoads': True},
-}
-with open('MemodayApp/Info.plist', 'wb') as f:
-    plistlib.dump(info, f)
-print('Info.plist created')
-          "
-
-          # Swift 文件用 Python 写入
-          python3 -c "
-code = '''import UIKit
-import WebKit
-
-@main
-class AppDelegate: UIResponder, UIApplicationDelegate {
-    var window: UIWindow?
-    func application(_ app: UIApplication, didFinishLaunchingWithOptions opts: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        window = UIWindow(frame: UIScreen.main.bounds)
-        let vc = ViewController()
-        window?.rootViewController = vc
-        window?.makeKeyAndVisible()
-        return True
-    }
-}
-
-class ViewController: UIViewController, WKNavigationDelegate {
-    var webView: WKWebView!
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = UIColor(red:0.95, green:0.96, blue:0.98, alpha:1)
-        title = \"念念日历\"
-        let cfg = WKWebViewConfiguration()
-        cfg.allowsInlineMediaPlayback = true
-        cfg.defaultWebpagePreferences?.allowsContentJavaScript = true
-        webView = WKWebView(frame: view.bounds, configuration: cfg)
-        webView.navigationDelegate = self
-        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        webView.scrollView.bounces = false
-        view.addSubview(webView)
-        if let u = Bundle.main.url(forResource:\"index\", withExtension:\"html\") {
-            webView.loadFileURL(u, allowingReadAccessTo: u.deletingLastPathComponent())
-        } else if let u = URL(string:\"https://772e2c5c13b4487d91faaa869468fee5.app.codebuddy.work/\") {
-            webView.load(URLRequest(url:u))
-        }
-    }
-    func webView(_: WKWebView, didStartProvisionalNavigation _: WKNavigation?) {}
-    func webView(_: WKWebView, didFinish _: WKNavigation?) {}
-    override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
-}
-'''
-with open('MemodayApp/AppDelegate.swift', 'w') as f:
-    f.write(code)
-print('Swift files created')
-          "
-
-          # LaunchScreen Storyboard
-          python3 -c "
-sb = '''<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<document type=\"com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB\" version=\"3.0\" toolsVersion=\"21701\" targetRuntime=\"iOS.CocoaTouch\" propertyAccessControl=\"none\" useAutolayout=\"YES\" launchScreen=\"YES\">
-    <device id=\"retina6_12\" orientation=\"portrait\" appearance=\"light\"/>
-    <dependencies>
-        <plugIn identifier=\"com.apple.InterfaceBuilder.IBCocoaTouchPlugin\" version=\"21679\"/>
-    </dependencies>
-    <scenes>
-        <scene sceneID=\"s1\"><objects>
-            <viewController id=\"vc1\" sceneMemberID=\"viewController\">
-                <view key=\"view\" id=\"v1\"><rect key=\"frame\" x=\"0\" y=\"0\" width=\"393\" height=\"852\"/><autoresizingMask key=\"autoresizingMask\" widthSizable=\"YES\" heightSizable=\"YES\"/>
-                    <color key=\"backgroundColor\" red=\"0.97\" green=\"0.40\" blue=\"0.48\" alpha=\"1\" colorSpace=\"custom\" customColorSpace=\"sRGB\"/></view>
-            </viewController>
-            <placeholder placeholderIdentifier=\"IBFirstResponder\" id=\"fi1\" sceneMemberID=\"firstResponder\"/>
-        </objects></scene>
-    </scenes>
-</document>'''
-with open('MemodayApp/Base.lproj/LaunchScreen.storyboard', 'w') as f:
-    f.write(sb)
-print('LaunchScreen created')
-          "
-
-          # 复制 Web 资源
-          cp ../index.html ../style.css ../manifest.json ../sw.js ../icon.svg MemodayApp/
-          cp -r ../js MemodayApp/js/ 2>/dev/null || mkdir -p MemodayApp/js
-          [ -d ../icons ] && cp -r ../icons MemodayApp/icons || true
-          
-          echo "=== All source files ==="
-          find . -type f | sort
-
-      - name: Generate Xcode Project
-        run: |
-          cd Memoday
-          brew install xcodegen 2>/dev/null || true
-          
-          # project.yml 也用 Python 写入避免问题
-          python3 -c "
-yml = '''name: Memoday
-options:
-  bundleIdPrefix: com.memoday
-  deploymentTarget: \"14.0\"
-  xcodeVersion: \"15.0\"
-targets:
-  Memoday:
-    type: application
-    platform: iOS
-    sources:
-      - path: MemodayApp
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.memoday.app
-        INFOPLIST_FILE: MemodayApp/Info.plist
-        PRODUCT_NAME: Memoday
-        TARGETED_DEVICE_FAMILY: \"1,2\"
-        IPHONEOS_DEPLOYMENT_TARGET: 14.0
-        SWIFT_VERSION: \"5.0\"
-        CODE_SIGN_IDENTITY: \"\"
-        CODE_SIGNING_REQUIRED: NO
-        CODE_SIGNING_ALLOWED: NO
-        ENABLE_BITCODE: NO
-'''
-with open('project.yml', 'w') as f:
-    f.write(yml)
-print('project.yml created')
-          "
-          
-          echo "Running xcodegen..."
-          xcodegen generate 2>&1
-          echo ""
-          ls -la *.xcodeproj 2>/dev/null && echo "Xcode project OK!" || echo "NO .xcodeproj found!"
-
-      - name: Build
-        run: |
-          cd Memoday
+          cd ios-app
+          xcodegen generate
           xcodebuild \
             -project Memoday.xcodeproj \
             -scheme Memoday \
@@ -174,31 +29,22 @@ print('project.yml created')
             CODE_SIGNING_ALLOWED=NO \
             ENABLE_BITCODE=NO \
             ONLY_ACTIVE_ARCH=NO \
-            clean build 2>&1 | tee build_log.txt | tail -50
-          
-          echo "=== Exit: $? ==="
-          find build -name "*.app" -not -path "*dSYM*" 2>/dev/null | head -5
+            clean build 2>&1 | tee log.txt | tail -40
+          echo "EXIT: $?"
+          find build -name "Memoday.app" | head -3
 
       - name: Package IPA
         run: |
-          APP=$(find Memoday/build -name "Memoday.app" -not -path "*dSYM*" 2>/dev/null | head -1)
-          [ -z "$APP" ] && APP=$(find Memoday/build -name "*.app" -not -path "*dSYM*" 2>/dev/null | head -1)
-          
-          if [ -z "$APP" ]; then
-            echo "ERROR: No .app built!"
-            tail -40 Memoday/build_log.txt 2>/dev/null
-            exit 1
-          fi
-          
-          echo "App: $APP"
-          rm -rf Payload; mkdir Payload
-          cp -R "$APP" Payload/
-          zip -rq Memoday.ipa Payload/
-          ls -lh Memoday.ipa
+          cd ios-app
+          APP=$(find build -name "Memoday.app" -not -path "*dSYM*" | head -1)
+          if [ ! "$APP" ]; then echo "FAIL"; tail -30 log.txt; exit 1; fi
+          rm -rf Payload; mkdir Payload; cp -R "$APP" Payload/
+          zip -rq ../Memoday.ipa Payload/
+          ls -lh ../Memoday.ipa
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: Memoday-iOS-IPA
-          path: Memoday/Memoday.ipa
+          path: Memoday.ipa
           retention-days: 30

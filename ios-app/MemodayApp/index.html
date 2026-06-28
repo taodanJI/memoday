@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="念念日历">
+  <meta name="theme-color" content="#7C3AED">
+  <title>念念日历 - 纪念日提醒</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+</head>
+<body>
+  <div id="app">
+    <!-- 顶部状态栏 -->
+    <header class="app-header" id="appHeader">
+      <h1 class="header-title" id="headerTitle">念念日历</h1>
+      <button class="header-action" id="headerAction" aria-label="操作"></button>
+    </header>
+
+    <!-- 页面容器 -->
+    <main class="app-content" id="appContent">
+      <!-- 各页面动态渲染 -->
+    </main>
+
+    <!-- 底部导航 -->
+    <nav class="tab-bar" id="tabBar">
+      <button class="tab-item active" data-page="home">
+        <svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 3l9 8h-3v9h-4v-6h-4v6H6v-9H3l9-8z" fill="currentColor"/></svg>
+        <span>今日</span>
+      </button>
+      <button class="tab-item" data-page="calendar">
+        <svg viewBox="0 0 24 24" width="24" height="24"><path d="M7 2v2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2h-2V2h-2v2H9V2H7zm0 6h10v2H7V8z" fill="currentColor"/></svg>
+        <span>日历</span>
+      </button>
+      <button class="tab-item" data-page="shared">
+        <svg viewBox="0 0 24 24" width="24" height="24"><path d="M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 3-1.34 3-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.67 0-8 1.34-8 4v2h8v-2c0-.73.4-1.38 1-1.83-.6-.11-1.27-.17-1-.17zm8 0c-.27 0-.94.06-1.5.17.6.45 1 1.1 1 1.83v2h8v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/></svg>
+        <span>共享</span>
+      </button>
+      <button class="tab-item" data-page="settings">
+        <svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm0 6a2 2 0 110-4 2 2 0 010 4zm9-2c0-.7-.06-1.38-.18-2.04l2.11-1.65-2-3.46-2.49 1a7.5 7.5 0 00-3.5-2.02L14 1h-4l-.44 2.83a7.5 7.5 0 00-3.5 2.02l-2.49-1-2 3.46L3.7 12c-.12.66-.18 1.34-.18 2.04 0 .7.06 1.38.18 2.04L1.59 17.73l2 3.46 2.49-1c1.05.82 2.25 1.44 3.5 2.02L10 23h4l.44-2.83a7.5 7.5 0 003.5-2.02l2.49 1 2-3.46-2.11-1.65c.12-.66.18-1.34.18-2.04z" fill="currentColor"/></svg>
+        <span>我的</span>
+      </button>
+    </nav>
+
+    <!-- 浮动添加按钮 -->
+    <button class="fab" id="fab" aria-label="添加事件">
+      <svg viewBox="0 0 24 24" width="28" height="28"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/></svg>
+    </button>
+  </div>
+
+  <!-- 事件编辑弹窗 -->
+  <div class="modal-overlay" id="eventModal">
+    <div class="modal-sheet">
+      <div class="sheet-handle"></div>
+      <div class="modal-header">
+        <h2 id="modalTitle">新建事件</h2>
+        <button class="modal-close" id="modalClose">&times;</button>
+      </div>
+      <form id="eventForm" class="modal-body">
+        <input type="hidden" id="eventId">
+
+        <div class="form-group">
+          <label>事件名称</label>
+          <input type="text" id="eventTitle" placeholder="给这个日子起个名字" required maxlength="30">
+        </div>
+
+        <div class="form-group">
+          <label>事件类型</label>
+          <div class="type-selector" id="typeSelector">
+            <button type="button" class="type-btn active" data-type="birthday" data-icon="🎂" data-label="生日">
+              <span class="type-emoji">🎂</span><span>生日</span>
+            </button>
+            <button type="button" class="type-btn" data-type="anniversary" data-icon="💝" data-label="纪念日">
+              <span class="type-emoji">💝</span><span>纪念日</span>
+            </button>
+            <button type="button" class="type-btn" data-type="date" data-icon="🌹" data-label="约会">
+              <span class="type-emoji">🌹</span><span>约会</span>
+            </button>
+            <button type="button" class="type-btn" data-type="important" data-icon="⭐" data-label="重要">
+              <span class="type-emoji">⭐</span><span>重要</span>
+            </button>
+            <button type="button" class="type-btn" data-type="custom" data-icon="📌" data-label="自定义">
+              <span class="type-emoji">📌</span><span>自定义</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex1">
+            <label>日期</label>
+            <input type="date" id="eventDate" required>
+          </div>
+          <div class="form-group" id="lunarGroup">
+            <label>农历</label>
+            <select id="eventLunar">
+              <option value="false">公历</option>
+              <option value="true">农历</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>重复</label>
+          <select id="eventRepeat">
+            <option value="yearly">每年（生日/纪念日推荐）</option>
+            <option value="once">仅一次</option>
+            <option value="monthly">每月</option>
+            <option value="weekly">每周</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>提前提醒</label>
+          <div class="reminder-options" id="reminderOptions">
+            <label class="check-chip"><input type="checkbox" value="0" checked><span>当天</span></label>
+            <label class="check-chip"><input type="checkbox" value="1" checked><span>提前1天</span></label>
+            <label class="check-chip"><input type="checkbox" value="3"><span>提前3天</span></label>
+            <label class="check-chip"><input type="checkbox" value="7"><span>提前7天</span></label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>备注</label>
+          <textarea id="eventNote" placeholder="写点什么..." maxlength="200" rows="2"></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-secondary" id="btnDelete" style="display:none">删除</button>
+          <button type="submit" class="btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 共享邀请弹窗 -->
+  <div class="modal-overlay" id="shareModal">
+    <div class="modal-sheet">
+      <div class="sheet-handle"></div>
+      <div class="modal-header">
+        <h2>共享纪念日</h2>
+        <button class="modal-close" id="shareModalClose">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="share-section">
+          <h3>创建共享纪念日</h3>
+          <p class="share-desc">创建后会生成分享链接，发给好友打开即可加入。双方都会收到提醒通知 💞</p>
+          <button class="btn-primary btn-block" id="btnCreateShared">+ 创建共享纪念日</button>
+        </div>
+        <div class="share-divider"><span>好友邀请你加入？</span></div>
+        <div class="share-section">
+          <p class="share-desc" style="text-align:center">请让好友把分享链接发给你<br>直接点击链接即可自动加入</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 分享链接展示弹窗 -->
+  <div class="modal-overlay" id="codeModal">
+    <div class="modal-sheet">
+      <div class="sheet-handle"></div>
+      <div class="modal-header">
+        <h2>分享给好友</h2>
+        <button class="modal-close" id="codeModalClose">&times;</button>
+      </div>
+      <div class="modal-body code-modal-body">
+        <p class="code-tip">把下方链接发给好友，TA打开即可加入共享纪念日</p>
+        <div class="share-link-box" id="shareLinkDisplay">-</div>
+        <div class="invite-code-tag" id="inviteCodeTag">邀请码：<span>------</span></div>
+        <button class="btn-primary btn-block" id="btnShareLink">分享链接给好友</button>
+        <button class="btn-secondary btn-block" id="btnCopyLink">复制链接</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 加入确认弹窗 -->
+  <div class="modal-overlay" id="joinModal">
+    <div class="modal-sheet" style="max-width:360px;border-radius:24px;">
+      <div class="sheet-handle"></div>
+      <div class="modal-body" style="padding:20px 24px 24px;text-align:center;">
+        <div style="font-size:48px;margin-bottom:12px;">💌</div>
+        <h3 id="joinTitle" style="font-size:18px;margin-bottom:8px;">加入共享纪念日</h3>
+        <p id="joinDesc" style="font-size:14px;color:var(--text-secondary);margin-bottom:20px;line-height:1.6;">-</p>
+        <div class="form-actions" style="margin-top:0;">
+          <button class="btn-secondary" id="btnJoinCancel">取消</button>
+          <button class="btn-primary" id="btnJoinConfirm">加入</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 自定义确认弹窗 -->
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal-sheet" style="max-width:340px;border-radius:24px;">
+      <div class="sheet-handle"></div>
+      <div class="modal-body" style="padding:20px 24px 24px;text-align:center;">
+        <div id="confirmIcon" style="font-size:40px;margin-bottom:12px;">⚠️</div>
+        <h3 id="confirmTitle" style="font-size:17px;margin-bottom:8px;">确认操作</h3>
+        <p id="confirmMsg" style="font-size:14px;color:var(--text-secondary);margin-bottom:20px;line-height:1.5;">-</p>
+        <div class="form-actions" style="margin-top:0;">
+          <button class="btn-secondary" id="btnConfirmCancel">取消</button>
+          <button class="btn-primary" id="btnConfirmOk" style="background:var(--danger);">确定</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 提示 -->
+  <div class="toast" id="toast"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

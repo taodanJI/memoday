@@ -1,0 +1,25 @@
+name: Memoday
+options:
+  bundleIdPrefix: com.memoday
+  deploymentTarget: "14.0"
+  xcodeVersion: "15.0"
+targets:
+  Memoday:
+    type: application
+    platform: iOS
+    sources:
+      - path: MemodayApp
+        excludes:
+          - "**/*.xcassets"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.memoday.app
+        INFOPLIST_FILE: MemodayApp/Info.plist
+        PRODUCT_NAME: Memoday
+        TARGETED_DEVICE_FAMILY: "1,2"
+        IPHONEOS_DEPLOYMENT_TARGET: 14.0
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
+        ENABLE_BITCODE: NO
