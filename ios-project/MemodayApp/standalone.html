@@ -660,45 +660,27 @@ function scheduleNotificationForEvent(event, reminderDays) {
   if (!nextDate) return;
   var info = getEventTypeInfo(event.type);
   var now = new Date();
-  var fireDate;
+  var notifId = 'memoday_' + event.id + '_' + reminderDays + 'd';
 
   if (reminderDays === 0) {
-    // 当天提醒：智能选择时间，确保一定能收到
-    var eventDay = new Date(nextDate);
-    eventDay.setHours(0, 0, 0, 0);
-    var today = new Date(now);
-    today.setHours(0, 0, 0, 0);
-
-    if (eventDay.getTime() === today.getTime()) {
-      // 事件就是今天
-      if (now.getHours() < 20) {
-        // 还没到晚上8点，设为晚上8点提醒
-        fireDate = new Date(now);
-        fireDate.setHours(20, 0, 0, 0);
-      } else {
-        // 已经过了晚上8点，1分钟后立即提醒
-        var notifIdNow = 'memoday_' + event.id + '_0d';
-        window.__sendNativeNotificationIn('【今天】' + event.title, '今天是「' + event.title + '」！' + (event.note ? '\n' + event.note : ''), notifIdNow, 60);
-        return;
-      }
-    } else {
-      // 事件不是今天（可能是计算问题），设为事件日早上9点
-      fireDate = new Date(nextDate);
-      fireDate.setHours(9, 0, 0, 0);
-      if (fireDate <= now) return;
-    }
-  } else {
-    // 非当天提醒：设为提醒日早上9点
-    fireDate = new Date(nextDate);
-    fireDate.setDate(fireDate.getDate() - reminderDays);
-    fireDate.setHours(9, 0, 0, 0);
-    if (fireDate <= now) return;
+    // 当天提醒：立即设为1分钟后触发
+    window.__sendNativeNotificationIn(
+      '【' + info.label + '】' + event.title,
+      '今天是「' + event.title + '」！' + (event.note ? '\n' + event.note : ''),
+      notifId,
+      60  // 1分钟后提醒
+    );
+    return;
   }
 
-  var notifId = 'memoday_' + event.id + '_' + reminderDays + 'd';
-  var title = '【' + info.label + '提醒】' + event.title;
-  var body = (reminderDays === 0 ? '今天是「' + event.title + '」！' : '还有' + reminderDays + '天就是「' + event.title + '」了') + (event.note ? '\n' + event.note : '');
+  // 非当天提醒：设为提醒日早上9点
+  var fireDate = new Date(nextDate);
+  fireDate.setDate(fireDate.getDate() - reminderDays);
+  fireDate.setHours(9, 0, 0, 0);
+  if (fireDate <= now) return;
 
+  var title = '【' + info.label + '提醒】' + event.title;
+  var body = '还有' + reminderDays + '天就是「' + event.title + '」了' + (event.note ? '\n' + event.note : '');
   window.__sendNativeNotification(title, body, notifId, fireDate.getTime());
 }
 
@@ -796,11 +778,11 @@ function startReminderCheck() {
 
 function sendTestNotification() {
   if (isIOSApp) {
-    // iOS App: 调度一个5秒后的测试通知（立即收到）
+    // iOS App: 立即发通知（1秒后，最快）
     var testId = 'memoday_test_' + Date.now();
     if (window.__sendNativeNotificationIn) {
-      window.__sendNativeNotificationIn('念念日历 🎉', '通知功能已开启！重要纪念日会提前提醒你。', testId, 5);
-      showToast('测试通知已发送，5秒后收到');
+      window.__sendNativeNotificationIn('念念日历 🎉', '通知功能已开启！重要纪念日会提前提醒你。', testId, 1);
+      showToast('通知已发送，1秒后收到');
     }
     return;
   }
