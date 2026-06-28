@@ -18,29 +18,22 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Build APK using system SDK
+    - name: Accept licenses & install platform
       run: |
-        # GitHub Actions ubuntu-latest has pre-installed Android SDK at /usr/local/lib/android/sdk
-        export ANDROID_HOME=/usr/local/lib/android/sdk
-        export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+        # sdkmanager is pre-installed on ubuntu-latest runners
+        yes | sdkmanager --licenses > /dev/null 2>&1 || true
+        sdkmanager "platforms;android-34" > /dev/null 2>&1 || true
 
-        echo "=== Accept licenses ==="
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
-
-        echo "=== Ensure required components ==="
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -3 || true
-
-        echo "=== Building APK ==="
-        cd $GITHUB_WORKSPACE/android
+    - name: Build APK
+      working-directory: android
+      run: |
         chmod +x gradlew
         ./gradlew assembleRelease --no-daemon
-
-        echo "=== Find APK ==="
-        find . -name "*.apk" -type f 2>/dev/null || echo "NO APK FOUND"
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: Memoday-Android-APK
-        path: android/**/*.apk
+        path: |
+          android/**/*.apk
         retention-days: 30
