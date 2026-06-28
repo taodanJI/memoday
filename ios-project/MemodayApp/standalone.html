@@ -767,12 +767,11 @@ function startReminderCheck() {
 
 function sendTestNotification() {
   if (isIOSApp) {
-    // iOS App: 调度一个1分钟后的测试通知
+    // iOS App: 调度一个5秒后的测试通知（立即收到）
     var testId = 'memoday_test_' + Date.now();
-    var fireDate = new Date(Date.now() + 60000); // 1分钟后
-    if (window.__sendNativeNotification) {
-      window.__sendNativeNotification('念念日历 🎉', '通知功能已开启！重要纪念日会提前提醒你。', testId, fireDate.getTime());
-      showToast('测试通知已调度，1分钟后会收到');
+    if (window.__sendNativeNotificationIn) {
+      window.__sendNativeNotificationIn('念念日历 🎉', '通知功能已开启！重要纪念日会提前提醒你。', testId, 5);
+      showToast('测试通知已发送，5秒后收到');
     }
     return;
   }

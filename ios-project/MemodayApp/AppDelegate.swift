@@ -7,10 +7,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ app: UIApplication, didFinishLaunchingWithOptions opts: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // 请求通知权限
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+        // 请求通知权限（包括临时授权，确保能立即收到）
+        UNUserNotificationCenter.current().requestAuthorization(
+            options: [.alert, .badge, .sound, .provisional]
+        ) { granted, error in
             DispatchQueue.main.async {
-                print("通知权限: \(granted)")
+                print("[Notify] 权限请求结果: \(granted)")
             }
         }
         window = UIWindow(frame: UIScreen.main.bounds)
@@ -24,11 +26,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHandler {
     var webView: WKWebView!
     let notificationCenter = UNUserNotificationCenter.current()
-
-    // 通知 ID 前缀
-    func notifId(_ id: String, days: Int) -> String {
-        return "memoday_\(id)_\(days)d"
-    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -44,7 +41,7 @@ class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHan
         cfg.userContentController.add(self, name: "nativeNotify")
         cfg.userContentController.add(self, name: "nativeLog")
 
-        // 注入 JS 桥接代码（在网页加载前）
+        // 注入 JS 桥接代码（在网页加载前执行）
         let bridgeJS = """
         (function() {
           window.__nativeBridgeReady = true;
@@ -64,6 +61,14 @@ class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHan
                 userInfo:userInfo||{}
               });
             },
+            scheduleIn: function(id, title, body, secondsFromNow, userInfo) {
+              window.webkit.messageHandlers.nativeNotify.postMessage({
+                action:'scheduleIn',
+                id:id, title:title, body:body,
+                seconds:secondsFromNow,
+                userInfo:userInfo||{}
+              });
+            },
             cancel: function(id) {
               window.webkit.messageHandlers.nativeNotify.postMessage({action:'cancel', id:id});
             },
@@ -71,12 +76,11 @@ class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHan
               window.webkit.messageHandlers.nativeNotify.postMessage({action:'cancelAll'});
             }
           };
-          // 覆盖网页的 Notification 请求
-          window.__requestNotificationPermission = function() {
-            return window.__nativeNotif.requestPermission();
-          };
           window.__sendNativeNotification = function(title, body, notifId, fireDateTimestamp) {
             window.__nativeNotif.schedule(notifId, title, body, fireDateTimestamp, {});
+          };
+          window.__sendNativeNotificationIn = function(title, body, notifId, secondsFromNow) {
+            window.__nativeNotif.scheduleIn(notifId, title, body, secondsFromNow, {});
           };
           window.__cancelNativeNotification = function(notifId) {
             window.__nativeNotif.cancel(notifId);
@@ -128,7 +132,7 @@ class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHan
         if action == "requestPermission" {
             notificationCenter.requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
                 DispatchQueue.main.async {
-                    print("通知权限请求结果: \(granted)")
+                    print("[Notify] 权限请求结果: \(granted)")
                 }
             }
         }
@@ -139,7 +143,8 @@ class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHan
                 case .authorized: status = "granted"
                 case .denied: status = "denied"
                 case .notDetermined: status = "notDetermined"
-                default: status = "unknown"
+                case .provisional: status = "provisional"
+                @unknown default: status = "unknown"
                 }
                 DispatchQueue.main.async {
                     self.webView.evaluateJavaScript("window.__nativePermissionStatus = '\(status)';") { _, _ in }
@@ -147,13 +152,24 @@ class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHan
             }
         }
         else if action == "schedule" {
+            // 使用精确的时间间隔触发（更快更可靠）
             guard let id = dict["id"] as? String,
                   let title = dict["title"] as? String,
                   let body = dict["body"] as? String,
                   let ts = dict["fireDate"] as? TimeInterval else { return }
             let fireDate = Date(timeIntervalSince1970: ts)
-            let userInfo = dict["userInfo"] as? [String: Any] ?? [:]
-            scheduleNotification(id: id, title: title, body: body, fireDate: fireDate, userInfo: userInfo)
+            let secondsFromNow = max(1, fireDate.timeIntervalSinceNow)
+            if secondsFromNow > 0 {
+                scheduleNotificationIn(id: id, title: title, body: body, secondsFromNow: secondsFromNow, userInfo: dict["userInfo"] as? [String: Any] ?? [:])
+            }
+        }
+        else if action == "scheduleIn" {
+            // 直接按秒数调度（用于测试通知，最快最准）
+            guard let id = dict["id"] as? String,
+                  let title = dict["title"] as? String,
+                  let body = dict["body"] as? String,
+                  let seconds = dict["seconds"] as? TimeInterval else { return }
+            scheduleNotificationIn(id: id, title: title, body: body, secondsFromNow: max(1, seconds), userInfo: dict["userInfo"] as? [String: Any] ?? [:])
         }
         else if action == "cancel" {
             guard let id = dict["id"] as? String else { return }
@@ -161,33 +177,41 @@ class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHan
         }
         else if action == "cancelAll" {
             notificationCenter.removeAllPendingNotificationRequests()
+            // 同时清除已送达的通知（重新授权后会显示）
+            notificationCenter.removeAllDeliveredNotifications()
         }
     }
 
-    func scheduleNotification(id: String, title: String, body: String, fireDate: Date, userInfo: [String: Any]) {
+    // 使用 UNTimeIntervalNotificationTrigger（最快最精确）
+    func scheduleNotificationIn(id: String, title: String, body: String, secondsFromNow: TimeInterval, userInfo: [String: Any]) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
         content.userInfo = userInfo
-        content.badge = 1
+        content.badge = NSNumber(value: 1)
+        // 关键：设置 interruptionLevel 为 .active，确保立即弹出横幅
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .active
+        }
 
-        let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
-        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: secondsFromNow, repeats: false)
         let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
         notificationCenter.add(request) { error in
             if let error = error {
-                print("通知调度失败: \(error)")
+                print("[Notify] 调度失败: \(error.localizedDescription)")
             } else {
-                print("通知已调度: \(id) @ \(fireDate)")
+                let date = Date().addingTimeInterval(secondsFromNow)
+                print("[Notify] 已调度: \(id) → \(date)")
             }
         }
     }
 
     func cancelNotification(id: String) {
         notificationCenter.removePendingNotificationRequests(withIdentifiers: [id])
-        print("通知已取消: \(id)")
+        // 同时取消已送达的通知
+        notificationCenter.removeDeliveredNotifications(withIdentifiers: [id])
+        print("[Notify] 已取消: \(id)")
     }
 
     // MARK: - WKNavigationDelegate
@@ -197,7 +221,7 @@ class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHan
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        print("WebView load error: \(error.localizedDescription)")
+        print("[WebView] 加载失败: \(error.localizedDescription)")
     }
 
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
