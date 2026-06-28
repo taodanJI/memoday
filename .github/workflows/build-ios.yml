@@ -48,8 +48,10 @@ jobs:
           echo "=== Does App.xcodeproj exist? ==="
           test -d ios/App/App.xcodeproj && echo "YES" || echo "NO"
 
-      - name: Build with xcodeproj (no pods needed)
-        run: cd ios/App && \
+      - name: Build with xcodeproj
+        run: |
+          cd ios/App
+          set +e
           xcodebuild \
             -project App.xcodeproj \
             -scheme App \
@@ -62,18 +64,23 @@ jobs:
             ENABLE_BITCODE=NO \
             ONLY_ACTIVE_ARCH=NO \
             GCC_GENERATE_DEBUGGING_SYMBOLS=NO \
-            build 2>&1 | tee ../build_log.txt | tail -50
-
-          echo "=== Exit code: $? ==="
-          ls ../build/DD/Build/Products/ 2>/dev/null || echo "No Products dir"
+            build > ../build_log.txt 2>&1
+          BUILD_EXIT=$?
+          echo "=== xcodebuild exit code: $BUILD_EXIT ==="
+          tail -50 ../build_log.txt
+          if [ "$BUILD_EXIT" -ne 0 ]; then
+            echo "Build failed with exit code $BUILD_EXIT"
+            exit $BUILD_EXIT
+          fi
+          echo ""
+          echo "=== Products directory ==="
+          ls -R ../build/DD/Build/Products/ 2>/dev/null || echo "(empty)"
 
       - name: Package IPA
         run: |
-          # 找 App.app
           APP_PATH=$(find ios/build/DD -name "App.app" -not -path "*dSYM*" 2>/dev/null | head -1)
 
           if [ -z "$APP_PATH" ]; then
-            # 备选搜索路径
             for p in \
               "ios/build/DD/Build/Products/Release-iphoneos/App.app" \
               "ios/build/DD/Build/Release-iphoneos/App.app"; do
@@ -88,7 +95,7 @@ jobs:
             exit 1
           fi
 
-          echo "Found app: $APP_PATH"
+          echo "Found app at: $APP_PATH"
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           zip -r Memoday.ipa Payload/
