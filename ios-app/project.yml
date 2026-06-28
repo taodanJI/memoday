@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.memoday
   deploymentTarget: "14.0"
   xcodeVersion: "15.0"
+  projectFormat: Xcode151
 targets:
   Memoday:
     type: application
