@@ -8,70 +8,60 @@ on:
 jobs:
   build:
     runs-on: macos-14
-    timeout-minutes: 15
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install xcodegen
-        run: brew install xcodegen 2>/dev/null || true
-
-      - name: Generate Xcode project
-        working-directory: ios-app
+      - name: Build App
         run: |
-          xcodegen generate 2>&1
-          echo "--- Project files ---"
-          find . -name "*.xcodeproj" -o -name "*.xcworkspace" | head -5
-          echo "--- MemodayApp contents ---"
-          ls -la MemodayApp/ 2>&1 || echo "MemodayApp dir not found"
-          echo "--- Info.plist check ---"
-          ls -la MemodayApp/Info.plist 2>&1 || echo "NO Info.plist"
+          set -e
 
-      - name: Build
-        working-directory: ios-app
-        run: |
-          set +e
-          xcodebuild \
-            -project Memoday.xcodeproj \
-            -scheme Memoday \
-            -configuration Debug \
+          # === Step 1: Create app bundle structure ===
+          APP_NAME="Memoday"
+          APP_BUNDLE="${APP_NAME}.app"
+          mkdir -p "${APP_BUNDLE}"
+          
+          # Copy Info.plist
+          cp ios-app/MemodayApp/Info.plist "${APP_BUNDLE}/"
+          
+          # === Step 2: Compile Swift code ===
+          # Use swiftc to compile AppDelegate.swift into a binary
+          echo "=== Compiling Swift source ==="
+          swiftc \
             -sdk iphoneos \
-            -derivedDataPath build \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            ENABLE_BITCODE=NO \
-            TARGETED_DEVICE_FAMILY="1" \
-            clean build 2>&1 | tee build.log
-          echo "=== EXIT CODE: $? ==="
-          echo "--- Looking for .app ---"
-          find build -name "*.app" -type d 2>&1 | head -10
-          echo "--- Products dir ---"
-          ls -laR build/Build/Products/ 2>&1 | head -30
-
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: ios-app/build.log
-          retention-days: 7
+            -target arm64-apple-ios14.0 \
+            -parse-as-library \
+            ios-app/MemodayApp/AppDelegate.swift \
+            -o "${APP_BUNDLE}/${APP_NAME}" 2>&1 | tee swift-build.log || {
+            echo "=== SWIFTC BUILD FAILED ==="
+            cat swift-build.log
+            exit 2
+          }
+          
+          # Make binary executable
+          chmod +x "${APP_BUNDLE}/${APP_NAME}"
+          
+          # Verify binary
+          file "${APP_BUNDLE}/${APP_NAME}"
+          ls -la "${APP_BUNDLE}/"
+          
+          # === Step 3: Copy web assets ===
+          cp ios-app/MemodayApp/index.html "${APP_BUNDLE}/"
+          cp ios-app/MemodayApp/style.css "${APP_BUNDLE}/"
+          cp ios-app/MemodayApp/sw.js "${APP_BUNDLE}/"
+          cp ios-app/MemodayApp/icon.svg "${APP_BUNDLE}/"
+          cp ios-app/MemodayApp/manifest.json "${APP_BUNDLE}/"
+          [ -d ios-app/MemodayApp/js ] && cp -r ios-app/MemodayApp/js "${APP_BUNDLE}/" || true
+          [ -d ios-app/MemodayApp/icons ] && cp -r ios-app/MemodayApp/icons "${APP_BUNDLE}/" || true
 
       - name: Package IPA
         run: |
-          APP_PATH=$(find ios-app/build -name "Memoday.app" -type d 2>/dev/null | head -1)
-          echo "APP_PATH=${APP_PATH}"
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found! Trying alternate locations..."
-            find ios-app/build -type d -name "*.app" 2>&1
-            find ios-app/build -type f -name "Memoday" 2>&1
-            exit 1
-          fi
           mkdir -p Payload
-          cp -r "$APP_PATH" Payload/
+          cp -r Memoday.app Payload/
           zip -r Memoday.ipa Payload
-          echo "IPA created OK"
+          echo "IPA created:"
           ls -lh Memoday.ipa
 
       - name: Upload IPA
@@ -80,4 +70,3 @@ jobs:
           name: Memoday-iOS-IPA
           path: Memoday.ipa
           retention-days: 30
-          if-no-files-found: warn
