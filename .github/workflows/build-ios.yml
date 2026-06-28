@@ -10,49 +10,125 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 10
 
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_15.4.app/Contents/Developer
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build & Package IPA
+      - name: List project files
+        run: |
+          echo "=== ios-project ==="
+          ls -laR ios-project/ | head -80
+          echo "=== project.pbxproj ==="
+          cat ios-project/Memoday.xcodeproj/project.pbxproj
+          echo "=== AppDelegate.swift ==="
+          cat ios-project/MemodayApp/AppDelegate.swift
+
+      - name: Validate project
+        run: |
+          cd ios-project
+          echo "=== xcodebuild -list ==="
+          xcodebuild -project Memoday.xcodeproj -list 2>&1 || echo "LIST FAILED"
+          echo "=== xcodebuild -showBuildSettings (sample) ==="
+          xcodebuild \
+            -project Memoday.xcodeproj \
+            -scheme Memoday \
+            -configuration Debug \
+            -sdk iphoneos \
+            -showBuildSettings 2>&1 | head -40 || echo "SETTINGS FAILED"
+
+      - name: Build
         run: |
           cd ios-project
           
-          # Build
+          set -x
+          
           xcodebuild \
             -project Memoday.xcodeproj \
             -scheme Memoday \
             -configuration Debug \
             -sdk iphoneos \
             -derivedDataPath build \
-            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ENABLE_BITCODE=NO \
             TARGETED_DEVICE_FAMILY="1" \
+            OTHER_SWIFT_FLAGS="-debug-info-format=dwarf" \
+            SWIFT_EMIT_LOC_STRINGS=NO \
             clean build 2>&1 | tee ../build.log
+          
+          BUILD_EXIT=${PIPESTATUS[0]}
+          echo "xcodebuild exit code: $BUILD_EXIT"
+
+      - name: Inspect build output
+        if: always()
+        run: |
+          echo "=== DerivedData structure (top 50) ==="
+          find ios-project/build -maxdepth 6 -type f -o -type d 2>/dev/null | sort | head -60
+          
+          echo ""
+          echo "=== Looking for .app bundles ==="
+          find ios-project/build -name "*.app" -type d 2>/dev/null
+          
+          echo ""
+          echo "=== Looking for executable ==="
+          find ios-project/build -type f -perm +111 -name "Memoday" 2>/dev/null
+          find ios-project/build -type f -name "Memoday" 2>/dev/null
+
+          echo ""
+          echo "=== Products dir contents ==="
+          ls -laR ios-project/build/Build/Products/ 2>/dev/null || echo "No Products dir"
+
+      - name: Package IPA
+        run: |
+          cd ios-project
           
           # Find .app
           APP_PATH=$(find build -name "*.app" -type d 2>/dev/null | head -1)
           
           if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found!"
-            find build -maxdepth 5 -type d 2>/dev/null | head -30
+            echo "FATAL: No .app found anywhere!"
             exit 1
           fi
           
-          echo "Found: $APP_PATH"
-          ls -la "$APP_PATH/" 2>/dev/null
+          echo "APP_PATH=$APP_PATH"
           
-          # Package
+          # Verify .app contents
+          echo "=== .app contents ==="
+          ls -laR "$APP_PATH/" 2>/dev/null | head -30
+          
+          # Check for executable
+          EXEC="$APP_PATH/Memoday"
+          if [ ! -f "$EXEC" ]; then
+            echo "WARNING: No executable at $EXEC"
+            echo "Searching for any executable..."
+            find "$APP_PATH" -type f 2>/dev/null
+          else
+            echo "Executable found: $EXEC ($(ls -lh "$EXEC" | awk '{print $5}'))"
+          fi
+          
+          # Create proper .app structure if needed
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/Memoday.app
+          
+          # Ensure directory structure inside .app
+          if [ ! -f "Payload/Memoday.app/Memoday" ] && [ -f "$EXEC" ]; then
+            cp "$EXEC" Payload/Memoday.app/Memoday
+          fi
+          
           zip -ry Memoday.ipa Payload
           mv Memoday.ipa ../
           rm -rf Payload
           
-          echo "IPA created:"
+          echo ""
+          echo "Final IPA:"
           ls -lh ../Memoday.ipa
+          echo ""
+          echo "IPA contents:"
+          unzip -l ../Memoday.ipa 2>/dev/null | tail -20
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
