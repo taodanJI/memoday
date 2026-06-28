@@ -663,12 +663,15 @@ function scheduleNotificationForEvent(event, reminderDays) {
   var notifId = 'memoday_' + event.id + '_' + reminderDays + 'd';
 
   if (reminderDays === 0) {
-    // 当天提醒：立即设为1分钟后触发
+    // 当天提醒：立即显示模拟横幅 + 1分钟后原生通知
+    if (window.__showFakeNotif) {
+      window.__showFakeNotif('【' + info.label + '】' + event.title, '今天是「' + event.title + '」！' + (event.note ? ' ' + event.note : ''));
+    }
     window.__sendNativeNotificationIn(
       '【' + info.label + '】' + event.title,
       '今天是「' + event.title + '」！' + (event.note ? '\n' + event.note : ''),
       notifId,
-      60  // 1分钟后提醒
+      60
     );
     return;
   }
@@ -778,12 +781,14 @@ function startReminderCheck() {
 
 function sendTestNotification() {
   if (isIOSApp) {
-    // iOS App: 立即发通知（1秒后，最快）
+    // iOS App: 立即显示模拟横幅（即时反馈）
+    if (window.__showFakeNotif) window.__showFakeNotif('念念日历 🎉', '通知功能已开启！重要纪念日会提前提醒你。');
+    // 同时调度原生通知（后台/锁屏时也能收到）
     var testId = 'memoday_test_' + Date.now();
     if (window.__sendNativeNotificationIn) {
       window.__sendNativeNotificationIn('念念日历 🎉', '通知功能已开启！重要纪念日会提前提醒你。', testId, 1);
-      showToast('通知已发送，1秒后收到');
     }
+    showToast('测试通知已发送');
     return;
   }
   sendNotification('念念日历 🎉', { body: '通知功能已开启！重要纪念日会提前提醒你。', tag: 'test_notification' });
@@ -1289,6 +1294,43 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
+  </script>
+
+  <!-- iOS 风格模拟通知横幅（前台立即显示，弥补原生通知延迟） -->
+  <div id="fakeNotifBanner" style="display:none;position:fixed;top:env(safe-area-inset-top,20px);left:50%;transform:translateX(-50%);width:92%;max-width:380px;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.18);padding:14px 16px;z-index:99999;display:none;align-items:center;gap:12px;animation:slideDown 0.35s ease-out;">
+    <div id="fakeNotifIcon" style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#7C3AED,#EC4899);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">📅</div>
+    <div style="flex:1;min-width:0;">
+      <div id="fakeNotifTitle" style="font-size:14px;font-weight:700;color:#000;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+      <div id="fakeNotifBody" style="font-size:13px;color:#3a3a3c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+    </div>
+    <div id="fakeNotifTime" style="font-size:11px;color:#8e8e93;flex-shrink:0;">现在</div>
+  </div>
+  <style>
+    @keyframes slideDown { from { opacity:0; transform:translateX(-50%) translateY(-20px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+    @keyframes slideUp { from { opacity:1; transform:translateX(-50%) translateY(0); } to { opacity:0; transform:translateX(-50%) translateY(-20px); } }
+  </style>
+  <script>
+    // 前台立即显示模拟通知横幅（原生通知有延迟时提供即时反馈）
+    window.__showFakeNotif = function(title, body) {
+      var banner = document.getElementById('fakeNotifBanner');
+      if (!banner) return;
+      document.getElementById('fakeNotifTitle').textContent = title;
+      document.getElementById('fakeNotifBody').textContent = body;
+      banner.style.display = 'flex';
+      banner.style.animation = 'slideDown 0.35s ease-out';
+      // 3秒后自动消失
+      clearTimeout(window.__fakeNotifTimer);
+      window.__fakeNotifTimer = setTimeout(function() {
+        banner.style.animation = 'slideUp 0.3s ease-in';
+        setTimeout(function() { banner.style.display = 'none'; }, 280);
+      }, 3000);
+    };
+    // 点击横幅关闭
+    document.getElementById('fakeNotifBanner').addEventListener('click', function() {
+      var b = document.getElementById('fakeNotifBanner');
+      b.style.animation = 'slideUp 0.3s ease-in';
+      setTimeout(function() { b.style.display = 'none'; }, 280);
+    });
   </script>
 </body>
 </html>

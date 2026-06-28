@@ -3,13 +3,11 @@ import WebKit
 import UserNotifications
 
 @main
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     var window: UIWindow?
 
     func application(_ app: UIApplication, didFinishLaunchingWithOptions opts: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // 设置通知中心代理（确保 App 在前台时也能收到通知）
-        UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
-        // 请求通知权限
+        UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(
             options: [.alert, .badge, .sound]
         ) { granted, error in
@@ -20,6 +18,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         window?.rootViewController = vc
         window?.makeKeyAndVisible()
         return true
+    }
+
+    // App 在前台时也能收到通知横幅
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound, .badge])
     }
 }
 
@@ -39,7 +42,7 @@ class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHan
         cfg.userContentController.add(self, name: "nativeNotify")
         cfg.userContentController.add(self, name: "nativeLog")
 
-        // 注入 JS 桥接代码
+        // 注入 JS 桥接代码（简化版，确保可靠）
         let bridgeJS = """
         (function(){
           window.__nativeBridgeReady=true;
@@ -114,6 +117,7 @@ class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHan
         }
         else if action == "scheduleIn" {
             guard let id = dict["id"] as? String, let title = dict["title"] as? String, let body = dict["body"] as? String, let seconds = dict["seconds"] as? TimeInterval else { return }
+            // 最小间隔设为 1 秒，但用精确日期触发（更可靠）
             schedule(id: id, title: title, body: body, seconds: max(1, seconds))
         }
         else if action == "cancel" {
@@ -128,21 +132,34 @@ class ViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHan
         }
     }
 
+    // 使用精确的日期触发（避免 TimeInterval 的系统延迟）
     func schedule(id: String, title: String, body: String, seconds: TimeInterval) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
         content.badge = NSNumber(value: 1)
-        if #available(iOS 15.0, *) { content.interruptionLevel = .active }
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
+        // 设 .timeSensitive 让通知立即弹出（iOS 15+），免费账号不支持但设了无害
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .timeSensitive
+        }
+
+        // 用精确的日期时间触发（比 TimeInterval 更可靠）
+        let fireDate = Date().addingTimeInterval(seconds)
+        let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: fireDate)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+
         let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
         nc.add(request) { error in
-            if let e = error { print("[Notify] 调度失败: \(e)") }
-            else { print("[Notify] 已调度: \(id) → \(Date().addingTimeInterval(seconds))") }
+            if let e = error {
+                print("[Notify] 调度失败: \(e.localizedDescription)")
+            } else {
+                print("[Notify] 已调度: \(id) → \(fireDate)")
+            }
         }
     }
 
+    // MARK: - WKNavigationDelegate
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         let js = "document.documentElement.style.webkitUserSelect='none';document.documentElement.style.webkitTouchCallout='none';"
         webView.evaluateJavaScript(js, completionHandler: nil)
