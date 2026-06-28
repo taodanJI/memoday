@@ -34,16 +34,29 @@ jobs:
         yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
         $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
         
-        echo "=== Building APK ==="
+        echo "=== Building APK (full output) ==="
         cd $GITHUB_WORKSPACE/android
         chmod +x gradlew
         export ANDROID_HOME=$HOME/android-sdk
-        ./gradlew assembleRelease --no-daemon
+        ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee /tmp/gradle-output.txt
         
-        echo "=== Finding APK ==="
+        echo ""
+        echo "=== APK Search Results ==="
         find . -name "*.apk" -type f 2>/dev/null || echo "NO APK FOUND"
+        
+        echo ""
+        echo "=== Build output directory listing ==="
+        ls -laR app/build/outputs/ 2>/dev/null || echo "No outputs dir"
+        ls -la app/build/apk/ 2>/dev/null || echo "No apk dir"
 
-    - name: Upload APK (search all locations)
+    - name: Upload build log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: gradle-build-log
+        path: /tmp/gradle-output.txt
+
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: Memoday-Android-APK
