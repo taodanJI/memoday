@@ -8,6 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		A1000001149A0B2B00000001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001149A0B2B00000001 /* AppDelegate.swift */; };
+		A8000001149A0B2B00000002 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A8000000149A0B2B00000002 /* Assets.xcassets */; };
+		A9000001149A0B2B00000001 /* index.html in Resources */ = {isa = PBXBuildFile; fileRef = A5000001149A0B2B00000001 /* index.html */; };
+		A9000002149A0B2B00000001 /* style.css in Resources */ = {isa = PBXBuildFile; fileRef = A6000001149A0B2B00000001 /* style.css */; };
+		A9000003149A0B2B00000001 /* sw.js in Resources */ = {isa = PBXBuildFile; fileRef = A7000001149A0B2B00000001 /* sw.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -17,6 +21,7 @@
 		A5000001149A0B2B00000001 /* index.html */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
 		A6000001149A0B2B00000001 /* style.css */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.css; path = style.css; sourceTree = "<group>"; };
 		A7000001149A0B2B00000001 /* sw.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = sw.js; sourceTree = "<group>"; };
+		A8000000149A0B2B00000002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -35,6 +40,7 @@
 			children = (
 				A2000001149A0B2B00000001 /* AppDelegate.swift */,
 				A4000001149A0B2B00000001 /* Info.plist */,
+				A8000000149A0B2B00000002 /* Assets.xcassets */,
 				A5000001149A0B2B00000001 /* index.html */,
 				A6000001149A0B2B00000001 /* style.css */,
 				A7000001149A0B2B00000001 /* sw.js */,
@@ -109,6 +115,10 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A8000001149A0B2B00000002 /* Assets.xcassets in Resources */,
+				A9000001149A0B2B00000001 /* index.html in Resources */,
+				A9000002149A0B2B00000001 /* style.css in Resources */,
+				A9000003149A0B2B00000001 /* sw.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
