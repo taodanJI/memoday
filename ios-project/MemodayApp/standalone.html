@@ -659,12 +659,41 @@ function scheduleNotificationForEvent(event, reminderDays) {
   var nextDate = getNextOccurrence(event);
   if (!nextDate) return;
   var info = getEventTypeInfo(event.type);
-  var fireDate = new Date(nextDate);
-  fireDate.setDate(fireDate.getDate() - reminderDays);
-  fireDate.setHours(9, 0, 0, 0); // 早上9点提醒
+  var now = new Date();
+  var fireDate;
 
-  // 如果时间已过，跳过
-  if (fireDate <= new Date()) return;
+  if (reminderDays === 0) {
+    // 当天提醒：智能选择时间，确保一定能收到
+    var eventDay = new Date(nextDate);
+    eventDay.setHours(0, 0, 0, 0);
+    var today = new Date(now);
+    today.setHours(0, 0, 0, 0);
+
+    if (eventDay.getTime() === today.getTime()) {
+      // 事件就是今天
+      if (now.getHours() < 20) {
+        // 还没到晚上8点，设为晚上8点提醒
+        fireDate = new Date(now);
+        fireDate.setHours(20, 0, 0, 0);
+      } else {
+        // 已经过了晚上8点，1分钟后立即提醒
+        var notifIdNow = 'memoday_' + event.id + '_0d';
+        window.__sendNativeNotificationIn('【今天】' + event.title, '今天是「' + event.title + '」！' + (event.note ? '\n' + event.note : ''), notifIdNow, 60);
+        return;
+      }
+    } else {
+      // 事件不是今天（可能是计算问题），设为事件日早上9点
+      fireDate = new Date(nextDate);
+      fireDate.setHours(9, 0, 0, 0);
+      if (fireDate <= now) return;
+    }
+  } else {
+    // 非当天提醒：设为提醒日早上9点
+    fireDate = new Date(nextDate);
+    fireDate.setDate(fireDate.getDate() - reminderDays);
+    fireDate.setHours(9, 0, 0, 0);
+    if (fireDate <= now) return;
+  }
 
   var notifId = 'memoday_' + event.id + '_' + reminderDays + 'd';
   var title = '【' + info.label + '提醒】' + event.title;
