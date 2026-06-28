@@ -34,8 +34,8 @@ public class MainActivity extends AppCompatActivity {
         // Create notification channel (required Android 8+)
         createNotificationChannel();
 
-        // Request notification permission (required Android 13+)
-        requestNotificationPermission();
+        // NOTE: 不在启动时请求通知权限
+        // 通知权限在用户保存事件时由 JS 端触发请求，避免每次打开都弹窗
 
         webView = new WebView(this);
         setContentView(webView);
@@ -144,7 +144,12 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void requestPermission() {
-            MainActivity.this.requestNotificationPermission();
+            // 只在未授权时请求，已授权不会重复弹窗
+            if (!MainActivity.this.hasNotificationPermission()) {
+                MainActivity.this.runOnUiThread(() -> {
+                    MainActivity.this.requestNotificationPermission();
+                });
+            }
         }
 
         @JavascriptInterface

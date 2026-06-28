@@ -744,8 +744,8 @@ function cancelEventNotifications(eventId) {
 }
 
 function checkReminders() {
-  if (isIOSApp) {
-    // iOS App: 重新调度所有通知（事件可能有变化）
+  if (isIOSApp || isAndroidApp) {
+    // 原生App: 重新调度所有通知（事件可能有变化）
     scheduleAllNotifications();
     return { today: 0, tomorrow: 0 };
   }
@@ -802,6 +802,13 @@ function startReminderCheck() {
     checkInterval = setInterval(function() { scheduleAllNotifications(); }, 3600000);
     return;
   }
+  if (isAndroidApp) {
+    // Android App: 调度所有原生通知，每小时重新调度一次
+    scheduleAllNotifications();
+    if (checkInterval) clearInterval(checkInterval);
+    checkInterval = setInterval(function() { scheduleAllNotifications(); }, 3600000);
+    return;
+  }
   // 浏览器环境
   try { checkReminders(); } catch(e) {}
   if (checkInterval) clearInterval(checkInterval);
@@ -819,6 +826,14 @@ function sendTestNotification() {
       window.__sendNativeNotificationIn('念念日历 🎉', '通知功能已开启！重要纪念日会提前提醒你。', testId, 1);
     }
     showToast('测试通知已发送');
+    return;
+  }
+  if (isAndroidApp) {
+    // Android App: 直接发原生通知
+    try {
+      window.AndroidNative.sendNotification('念念日历 🎉', '通知功能已开启！重要纪念日会提前提醒你。');
+      showToast('测试通知已发送');
+    } catch(e) { showToast('通知发送失败'); }
     return;
   }
   sendNotification('念念日历 🎉', { body: '通知功能已开启！重要纪念日会提前提醒你。', tag: 'test_notification' });
@@ -1147,11 +1162,13 @@ function handleEventSave() {
   document.querySelectorAll('#reminderOptions input:checked').forEach(function(input) { reminders.push(parseInt(input.value)); });
   if (!title || !date) { showToast('请填写事件名称和日期'); return; }
   var eventData = { title: title, date: date, type: selectedType, repeat: repeat, note: note, lunar: lunar, reminders: reminders };
+  // 保存事件时请求通知权限（仅首次，已授权不会重复弹窗）
+  requestNotificationPermission();
   if (isSharedCreate) {
     var profile = getProfile();
     var event = createSharedEvent(eventData, profile.name);
     closeEventModal(); showToast('共享纪念日已创建'); showShareLink(event);
-    if (isIOSApp) scheduleAllNotifications();
+    scheduleAllNotifications();
     refreshCurrentPage(); return;
   }
   if (id) {
@@ -1159,11 +1176,11 @@ function handleEventSave() {
     if (existing && existing.isShared) { updateSharedEvent(id, eventData); }
     else { saveEvent(Object.assign({ id: id }, eventData)); }
     showToast('已保存');
-    if (isIOSApp) { cancelEventNotifications(id); scheduleAllNotifications(); }
+    cancelEventNotifications(id); scheduleAllNotifications();
   } else {
     var newEvent = saveEvent(eventData);
     showToast('已创建');
-    if (isIOSApp) scheduleAllNotifications();
+    scheduleAllNotifications();
   }
   closeEventModal(); refreshCurrentPage(); try { checkReminders(); } catch(e) {}
 }
