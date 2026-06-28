@@ -20,11 +20,10 @@ jobs:
 
     - name: Install Android SDK & Build APK
       run: |
-        echo "=== Step 1: Download Android command-line tools ==="
+        echo "=== Download Android command-line tools ==="
         mkdir -p $HOME/android-sdk/cmdline-tools
         cd $HOME/android-sdk/cmdline-tools
         curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o cmdtools.zip
-        ls -la cmdtools.zip
         unzip -q cmdtools.zip
         mv cmdline-tools latest
         rm cmdtools.zip
@@ -32,44 +31,21 @@ jobs:
         export ANDROID_HOME=$HOME/android-sdk
         export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
         
-        echo "=== Step 2: Accept licenses ==="
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /tmp/sdk-licenses.log 2>&1 || true
-        tail -5 /tmp/sdk-licenses.log
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
         
-        echo "=== Step 3: Install SDK components ==="
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -10
-        
-        echo "=== Verify SDK ==="
-        ls $ANDROID_HOME/platforms/ 2>&1 || echo "NO PLATFORMS"
-        ls $ANDROID_HOME/build-tools/ 2>&1 || echo "NO BUILD-TOOLS"
-        
-        echo "=== ANDROID_HOME=$ANDROID_HOME ==="
-        
-        echo "=== Step 4: Build APK ==="
+        echo "=== Building APK ==="
         cd $GITHUB_WORKSPACE/android
         chmod +x gradlew
         export ANDROID_HOME=$HOME/android-sdk
-        ./gradlew assembleRelease --no-daemon --stacktrace --info 2>&1 | tail -80
+        ./gradlew assembleRelease --no-daemon
+        
+        echo "=== Finding APK ==="
+        find . -name "*.apk" -type f 2>/dev/null || echo "NO APK FOUND"
 
-    - name: Check if APK exists
-      run: |
-        find $GITHUB_WORKSPACE/android/app/build -name "*.apk" 2>/dev/null || echo "NO APK FOUND"
-        ls -laR $GITHUB_WORKSPACE/android/app/build/outputs/ 2>/dev/null || echo "No outputs dir"
-
-    - name: Upload APK if exists
+    - name: Upload APK (search all locations)
       uses: actions/upload-artifact@v4
       with:
         name: Memoday-Android-APK
-        path: android/app/build/outputs/apk/release/*.apk
+        path: android/**/*.apk
         retention-days: 30
-      continue-on-error: true
-
-    - name: Upload full build logs on failure
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-logs
-        path: |
-          android/app/build/reports/
-          android/app/build/outputs/
-          /tmp/sdk-licenses.log
