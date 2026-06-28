@@ -14,30 +14,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: List project contents
-        run: |
-          echo "=== ios-project/ ==="
-          ls -la ios-project/
-          echo ""
-          echo "=== ios-project/MemodayApp/ ==="
-          ls -la ios-project/MemodayApp/
-          echo ""
-          echo "=== ios-project/Memoday.xcodeproj/ ==="
-          ls -la ios-project/Memoday.xcodeproj/
-
-      - name: Validate project
-        run: |
-          cd ios-project
-          echo "=== Listing schemes ==="
-          xcodebuild -project Memoday.xcodeproj -list 2>&1 || echo "xcodebuild -list failed"
-          echo ""
-          echo "=== Listing targets ==="
-          xcodebuild -project Memoday.xcodeproj -list -json 2>&1 | head -30 || true
-
-      - name: Build
+      - name: Build & Package IPA
         run: |
           cd ios-project
           
+          # Build
           xcodebuild \
             -project Memoday.xcodeproj \
             -scheme Memoday \
@@ -51,21 +32,34 @@ jobs:
             TARGETED_DEVICE_FAMILY="1" \
             clean build 2>&1 | tee ../build.log
           
-          BUILD_EXIT=$?
-          echo ""
-          echo "=========================================="
-          echo "XCODEBUILD EXIT CODE: $BUILD_EXIT"
-          echo "=========================================="
+          # Find .app
+          APP_PATH=$(find build -name "*.app" -type d 2>/dev/null | head -1)
           
-          echo ""
-          echo "=== Searching for .app bundles ==="
-          find . -name "*.app" -type d 2>/dev/null | head -10
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app found!"
+            find build -maxdepth 5 -type d 2>/dev/null | head -30
+            exit 1
+          fi
           
-          echo ""
-          echo "=== Contents of derivedData Products ==="
-          ls -laR build/Build/Products 2>/dev/null | head -60 || echo "(directory not found)"
+          echo "Found: $APP_PATH"
+          ls -la "$APP_PATH/" 2>/dev/null
+          
+          # Package
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/Memoday.app
+          zip -ry Memoday.ipa Payload
+          mv Memoday.ipa ../
+          rm -rf Payload
+          
+          echo "IPA created:"
+          ls -lh ../Memoday.ipa
 
-          exit $BUILD_EXIT
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Memoday-iOS-IPA
+          path: Memoday.ipa
+          retention-days: 30
 
       - name: Upload log
         if: always()
@@ -74,36 +68,3 @@ jobs:
           name: build-log
           path: build.log
           retention-days: 7
-
-      - name: Package IPA
-        run: |
-          # Search broadly for any .app bundle  
-          APP_PATH=$(find . -name "*.app" -type d 2>/dev/null | grep -i memo | head -1)
-          
-          if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find . -name "*.app" -type d 2>/dev/null | head -1)
-          fi
-          
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found!"
-            echo "--- Full directory listing ---"
-            find . -maxdepth 6 -type d 2>/dev/null | grep -v ".git\|node_modules" | head -40
-            exit 1
-          fi
-          
-          echo "APP_PATH=$APP_PATH"
-          ls -la "$APP_PATH/" 2>/dev/null || true
-          
-          mkdir -p Payload
-          cp -R "$APP_PATH" Payload/Memoday.app
-          zip -ry Memoday.ipa Payload
-          rm -rf Payload
-          echo ""
-          ls -lh Memoday.ipa
-
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: Memoday-iOS-IPA
-          path: Memoday.ipa
-          retention-days: 30
