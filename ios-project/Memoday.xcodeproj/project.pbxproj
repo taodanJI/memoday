@@ -7,25 +7,25 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A1000001149A0B2B00000001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001149A0B2B00000001 /* AppDelegate.swift */; };
-		A8000001149A0B2B00000002 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A8000000149A0B2B00000002 /* Assets.xcassets */; };
-		A9000001149A0B2B00000001 /* index.html in Resources */ = {isa = PBXBuildFile; fileRef = A5000001149A0B2B00000001 /* index.html */; };
-		A9000002149A0B2B00000001 /* style.css in Resources */ = {isa = PBXBuildFile; fileRef = A6000001149A0B2B00000001 /* style.css */; };
-		A9000003149A0B2B00000001 /* sw.js in Resources */ = {isa = PBXBuildFile; fileRef = A7000001149A0B2B00000001 /* sw.js */; };
+		B3000001149A0B2B00000001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4000001149A0B2B00000001 /* AppDelegate.swift */; };
+		B3000001149A0B2B00000002 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B5000001149A0B2B00000002 /* Assets.xcassets */; };
+		B3000001149A0B2B00000003 /* index.html in Resources */ = {isa = PBXBuildFile; fileRef = B6000001149A0B2B00000001 /* index.html */; };
+		B3000001149A0B2B00000004 /* style.css in Resources */ = {isa = PBXBuildFile; fileRef = B7000001149A0B2B00000001 /* style.css */; };
+		B3000001149A0B2B00000005 /* sw.js in Resources */ = {isa = PBXBuildFile; fileRef = B8000001149A0B2B00000001 /* sw.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		A3000001149A0B2B00000001 /* Memoday.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Memoday.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A2000001149A0B2B00000001 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		A4000001149A0B2B00000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		A5000001149A0B2B00000001 /* index.html */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
-		A6000001149A0B2B00000001 /* style.css */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.css; path = style.css; sourceTree = "<group>"; };
-		A7000001149A0B2B00000001 /* sw.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = sw.js; sourceTree = "<group>"; };
-		A8000000149A0B2B00000002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B1000001149A0B2B00000001 /* Memoday.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Memoday.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B4000001149A0B2B00000001 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		B4500001149A0B2B00000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B5000001149A0B2B00000002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B6000001149A0B2B00000001 /* index.html */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
+		B7000001149A0B2B00000001 /* style.css */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.css; path = style.css; sourceTree = "<group>"; };
+		B8000001149A0B2B00000001 /* sw.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = sw.js; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		A8000002149A0B2B00000001 /* Frameworks */ = {
+		B2000002149A0B2B00000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -35,37 +35,38 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A9000003149A0B2B00000001 /* Main */ = {
+		B9000003149A0B2B00000001 /* MemodayApp */ = {
 			isa = PBXGroup;
 			children = (
-				A2000001149A0B2B00000001 /* AppDelegate.swift */,
-				A4000001149A0B2B00000001 /* Info.plist */,
-				A8000000149A0B2B00000002 /* Assets.xcassets */,
-				A5000001149A0B2B00000001 /* index.html */,
-				A6000001149A0B2B00000001 /* style.css */,
-				A7000001149A0B2B00000001 /* sw.js */,
+				B4000001149A0B2B00000001 /* AppDelegate.swift */,
+				B4500001149A0B2B00000001 /* Info.plist */,
+				B5000001149A0B2B00000002 /* Assets.xcassets */,
+				B6000001149A0B2B00000001 /* index.html */,
+				B7000001149A0B2B00000001 /* style.css */,
+				B8000001149A0B2B00000001 /* sw.js */,
 			);
 			path = MemodayApp;
 			sourceTree = "<group>";
 		};
-		AA000003149A0B2B00000001 = {
+		BA000003149A0B2B00000001 = {
 			isa = PBXGroup;
 			children = (
-				A9000003149A0B2B00000001 /* Main */,
-				A3000001149A0B2B00000001 /* Memoday.app */,
+				B9000003149A0B2B00000001 /* MemodayApp */,
+				B1000001149A0B2B00000001 /* Memoday.app */,
 			);
+			name = "";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		AB000001149A0B2B00000001 /* Memoday */ = {
+		BC000001149A0B2B00000001 /* Memoday */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AC000002149A0B2B00000001 /* Build configuration list for PBXNativeTarget "Memoday" */;
+			buildConfigurationList = BD000002149A0B2B00000001 /* Build configuration list for PBXNativeTarget "Memoday" */;
 			buildPhases = (
-				AD000002149A0B2B00000001 /* Sources */,
-				A8000002149A0B2B00000001 /* Frameworks */,
-				AE000002149A0B2B00000001 /* Resources */,
+				BE000002149A0B2B00000001 /* Sources */,
+				B2000002149A0B2B00000001 /* Frameworks */,
+				BF000002149A0B2B00000001 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -73,70 +74,70 @@
 			);
 			name = Memoday;
 			productName = Memoday;
-			productReference = A3000001149A0B2B00000001 /* Memoday.app */;
+			productReference = B1000001149A0B2B00000001 /* Memoday.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		AF000001149A0B2B00000001 /* Project object */ = {
+		C0000001149A0B2B00000001 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastSwiftUpdateCheck = 1540;
+				LastUpgradeCheck = 1540;
 				TargetAttributes = {
-					AB000001149A0B2B00000001 = {
-						CreatedOnToolsVersion = 15.0;
+					BC000001149A0B2B00000001 = {
+						CreatedOnToolsVersion = 15.4;
 					};
 				};
 			};
-			buildConfigurationList = B0000001149A0B2B00000002 /* Build configuration list for PBXProject "Memoday" */;
+			buildConfigurationList = C1000001149A0B2B00000002 /* Build configuration list for PBXProject "Memoday" */;
 			compatibilityVersion = "Xcode 14.0";
-			developmentRegion = "zh-Hans";
+			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 				"zh-Hans",
 			);
-			mainGroup = AA000003149A0B2B00000001;
-			productRefGroup = AB000005149A0B2B00000001 /* Products */;
+			mainGroup = BA000003149A0B2B00000001;
+			productRefGroup = C2000005149A0B2B00000001 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				AB000001149A0B2B00000001 /* Memoday */,
+				BC000001149A0B2B00000001 /* Memoday */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		AE000002149A0B2B00000001 /* Resources */ = {
+		BF000002149A0B2B00000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A8000001149A0B2B00000002 /* Assets.xcassets in Resources */,
-				A9000001149A0B2B00000001 /* index.html in Resources */,
-				A9000002149A0B2B00000001 /* style.css in Resources */,
-				A9000003149A0B2B00000001 /* sw.js in Resources */,
+				B3000001149A0B2B00000002 /* Assets.xcassets in Resources */,
+				B3000001149A0B2B00000003 /* index.html in Resources */,
+				B3000001149A0B2B00000004 /* style.css in Resources */,
+				B3000001149A0B2B00000005 /* sw.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		AD000002149A0B2B00000001 /* Sources */ = {
+		BE000002149A0B2B00000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A1000001149A0B2B00000001 /* AppDelegate.swift in Sources */,
+				B3000001149A0B2B00000001 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		B1000001149A0B2B00000001 /* Debug */ = {
+		C3000001149A0B2B00000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -196,7 +197,7 @@
 			};
 			name = Debug;
 		};
-		B2000001149A0B2B00000001 /* Release */ = {
+		C4000001149A0B2B00000001 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -249,7 +250,7 @@
 			};
 			name = Release;
 		};
-		B3000001149A0B2B00000001 /* Debug */ = {
+		C5000001149A0B2B00000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -269,7 +270,7 @@
 			};
 			name = Debug;
 		};
-		B4000001149A0B2B00000001 /* Release */ = {
+		C6000001149A0B2B00000001 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -292,25 +293,25 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		AC000002149A0B2B00000001 /* Build configuration list for PBXNativeTarget "Memoday" */ = {
+		BD000002149A0B2B00000001 /* Build configuration list for PBXNativeTarget "Memoday" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B3000001149A0B2B00000001 /* Debug */,
-				B4000001149A0B2B00000001 /* Release */,
+				C5000001149A0B2B00000001 /* Debug */,
+				C6000001149A0B2B00000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		B0000001149A0B2B00000002 /* Build configuration list for PBXProject "Memoday" */ = {
+		C1000001149A0B2B00000002 /* Build configuration list for PBXProject "Memoday" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B1000001149A0B2B00000001 /* Debug */,
-				B2000001149A0B2B00000001 /* Release */,
+				C3000001149A0B2B00000001 /* Debug */,
+				C4000001149A0B2B00000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = AF000001149A0B2B00000001 /* Project object */;
+	rootObject = C0000001149A0B2B00000001 /* Project object */;
 }
