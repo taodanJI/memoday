@@ -628,7 +628,7 @@ var isAndroidApp = !!window.AndroidNative;
 
 function requestNotificationPermission() {
   if (isIOSApp) {
-    // iOS App: 使用原生通知，权限已在 App 启动时请求
+    // iOS App: 通过原生桥接请求权限（原生会检查状态，已授权不重复弹窗）
     if (window.__nativeNotif) {
       return window.__nativeNotif.requestPermission().then(function() { return true; }).catch(function() { return true; });
     }

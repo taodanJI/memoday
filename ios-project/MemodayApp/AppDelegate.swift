@@ -14,6 +14,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         window?.rootViewController = vc
         window?.makeKeyAndVisible()
 
+        // 通知权限：只在第一次打开App时请求（notDetermined），已授权或已拒绝都不弹
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            if settings.authorizationStatus == .notDetermined {
+                // 延迟2秒，等WebView加载完再弹，体验更好
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+                        print("[Notify] 首次权限请求结果: \(granted)")
+                    }
+                }
+            } else {
+                print("[Notify] 权限状态: \(settings.authorizationStatus.rawValue)，不重复请求")
+            }
+        }
+
         // 检查剪贴板是否有分享链接（用户建议的自动检测功能）
         checkClipboardForShareLink()
 
