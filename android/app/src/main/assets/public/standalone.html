@@ -503,12 +503,14 @@ function importSharedEvent(data, myName) {
   return { success: true, event: event };
 }
 function generateShareLink(event) {
-  // 在原生App中，使用在线网址（file:// URL别人打不开）
-  var baseUrl = 'https://772e2c5c13b4487d91faaa869468fee5.app.codebuddy.work/';
+  var encoded = encodeShareData(event);
+  // 始终使用在线网址作为分享链接（兼容所有平台）
+  // iPhone打开时网页会自动跳转到App，Android直接显示网页版加入弹窗
+  var baseUrl = 'https://ae53a3d49579416a965d69a733d66233.app.codebuddy.work/';
   if (isIOSApp || isAndroidApp) {
-    return baseUrl + '?join=' + encodeShareData(event);
+    return baseUrl + '?join=' + encoded;
   }
-  return window.location.origin + window.location.pathname + '?join=' + encodeShareData(event);
+  return window.location.origin + window.location.pathname + '?join=' + encoded;
 }
 function generateInviteCode() {
   var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -907,10 +909,20 @@ function init() {
 }
 
 function checkUrlJoin() {
-  // Android App: 检查原生注入的 join 数据
+  // 原生App（iOS/Android）: 检查原生注入的 join 数据
   if (window.__pendingJoinData) {
-    var data = decodeShareData(window.__pendingJoinData);
+    var rawJoin = window.__pendingJoinData;
     window.__pendingJoinData = null;
+    // 支持 memoday://join?data=xxx 格式或纯 base64 数据
+    var encoded = rawJoin;
+    if (rawJoin.indexOf('memoday://') === 0) {
+      var match = rawJoin.match(/[?&]data=([^&]+)/);
+      if (match) encoded = decodeURIComponent(match[1]);
+    } else if (rawJoin.indexOf('http') === 0 && rawJoin.indexOf('join=') >= 0) {
+      var m2 = rawJoin.match(/[?&]join=([^&]+)/);
+      if (m2) encoded = decodeURIComponent(m2[1]);
+    }
+    var data = decodeShareData(encoded);
     if (!data) { showToast('邀请链接无效'); return; }
     var shared = getSharedEvents();
     if (data.inviteCode && shared.some(function(e) { return e.inviteCode === data.inviteCode; })) {
@@ -920,7 +932,7 @@ function checkUrlJoin() {
     pendingJoinData = data;
     var info = getEventTypeInfo(data.type || 'anniversary');
     document.getElementById('joinTitle').textContent = (data.owner || '好友') + ' 邀请你加入';
-    document.getElementById('joinDesc').innerHTML = info.icon + ' <strong>' + data.title + '</strong><br>日期：' + formatDate(data.date) + '<br>类型：' + info.label + '<br>加入后双方都会收到提醒通知 💞';
+    document.getElementById('joinDesc').innerHTML = info.icon + ' <strong>' + data.title + '</strong><br>日期：' + formatDate(data.date) + '<br>类型：' + info.label + '<br>加入后双方都会收到提醒通知 \uD83D\uDC9E';
     document.getElementById('joinModal').classList.add('show');
     return;
   }
@@ -939,17 +951,16 @@ function checkUrlJoin() {
   pendingJoinData = data;
   var info = getEventTypeInfo(data.type || 'anniversary');
   document.getElementById('joinTitle').textContent = (data.owner || '好友') + ' 邀请你加入';
-  document.getElementById('joinDesc').innerHTML = info.icon + ' <strong>' + data.title + '</strong><br>日期：' + formatDate(data.date) + '<br>类型：' + info.label + '<br>加入后双方都会收到提醒通知 💞';
+  document.getElementById('joinDesc').innerHTML = info.icon + ' <strong>' + data.title + '</strong><br>日期：' + formatDate(data.date) + '<br>类型：' + info.label + '<br>加入后双方都会收到提醒通知 \uD83D\uDC9E';
   document.getElementById('joinModal').classList.add('show');
   window.history.replaceState({}, '', window.location.pathname);
 }
 
-// 原生App注入 join 数据的回调
+// 原生App注入 join 数据的回调（来自URL Scheme或剪贴板检测）
 window.__setJoinData = function(joinStr) {
   window.__pendingJoinData = joinStr;
-  // 页面已加载完毕后立即处理
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    try { checkUrlJoin(); } catch(e) {}
+    try { checkUrlJoin(); } catch(e) { console.error('Join error:', e); }
   }
 };
 
@@ -1252,14 +1263,30 @@ function bindCodeModal() {
   document.getElementById('btnShareLink').addEventListener('click', function() {
     var link = document.getElementById('shareLinkDisplay').textContent;
     var profile = getProfile();
-    var text = profile.name + ' 邀请你一起记录纪念日「' + currentShareEventTitle + '」💞\n点击链接加入：\n' + link;
-    if (navigator.share) navigator.share({ title: '念念日历邀请', text: text, url: link });
-    else if (navigator.clipboard) navigator.clipboard.writeText(text).then(function() { showToast('邀请信息已复制，去发给好友吧'); });
+    var text = profile.name + ' 邀请你一起记录纪念日「' + currentShareEventTitle + '」\uD83D\uDC9E\n点击链接加入：\n' + link;
+    // iOS App: 走原生分享面板
+    if (isIOSApp && window.__nativeShareText) {
+      window.__nativeShareText(text);
+    } else if (navigator.share) {
+      navigator.share({ title: '念念日历邀请', text: text, url: link });
+    } else if (isIOSApp && window.__nativeCopyText) {
+      window.__nativeCopyText(text);
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(function() { showToast('邀请信息已复制，去发给好友吧'); });
+    } else {
+      showToast('请手动长按复制链接');
+    }
   });
   document.getElementById('btnCopyLink').addEventListener('click', function() {
     var link = document.getElementById('shareLinkDisplay').textContent;
-    if (navigator.clipboard) navigator.clipboard.writeText(link).then(function() { showToast('链接已复制'); });
-    else showToast('请手动长按复制链接');
+    // iOS App: 走原生复制
+    if (isIOSApp && window.__nativeCopyText) {
+      window.__nativeCopyText(link);
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(link).then(function() { showToast('链接已复制'); });
+    } else {
+      showToast('请手动长按复制链接');
+    }
   });
 }
 

@@ -859,6 +859,32 @@ function checkUrlJoin() {
   var params = new URLSearchParams(window.location.search);
   var joinData = params.get('join');
   if (!joinData) return;
+
+  // 如果是 iPhone/iPad 且不是在 App 内，尝试用 memoday:// 打开 App
+  var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  var isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  if (isIOS && !isStandalone) {
+    // 尝试通过 URL Scheme 打开 App
+    var appUrl = 'memoday://join?data=' + encodeURIComponent(joinData);
+    var iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = appUrl;
+    document.body.appendChild(iframe);
+    setTimeout(function() { document.body.removeChild(iframe); }, 2000);
+    // 如果 2.5 秒后还在当前页面（App 没打开），显示网页版加入弹窗
+    setTimeout(function() {
+      if (!document.hidden) {
+        showWebJoinModal(joinData);
+      }
+    }, 2500);
+    return;
+  }
+
+  // 非 iOS 或已在 App 内：直接显示加入弹窗
+  showWebJoinModal(joinData);
+}
+
+function showWebJoinModal(joinData) {
   var data = decodeShareData(joinData);
   if (!data) { showToast('邀请链接无效'); return; }
   var shared = getSharedEvents();
@@ -870,7 +896,7 @@ function checkUrlJoin() {
   pendingJoinData = data;
   var info = getEventTypeInfo(data.type || 'anniversary');
   document.getElementById('joinTitle').textContent = (data.owner || '好友') + ' 邀请你加入';
-  document.getElementById('joinDesc').innerHTML = info.icon + ' <strong>' + data.title + '</strong><br>日期：' + formatDate(data.date) + '<br>类型：' + info.label + '<br>加入后双方都会收到提醒通知 💞';
+  document.getElementById('joinDesc').innerHTML = info.icon + ' <strong>' + data.title + '</strong><br>日期：' + formatDate(data.date) + '<br>类型：' + info.label + '<br>加入后双方都会收到提醒通知 \uD83D\uDC9E';
   document.getElementById('joinModal').classList.add('show');
   window.history.replaceState({}, '', window.location.pathname);
 }
