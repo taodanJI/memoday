@@ -805,6 +805,7 @@ var isSharedCreate = false;
 var selectedType = 'birthday';
 var calendarSelectedDate = null;
 var pendingJoinData = null;
+var pendingJoinMode = null;
 var confirmCallback = null;
 var currentShareEventTitle = '';
 var calState = { year: new Date().getFullYear(), month: new Date().getMonth(), selectedDate: todayStr() };
@@ -888,17 +889,60 @@ function showWebJoinModal(joinData) {
   var data = decodeShareData(joinData);
   if (!data) { showToast('邀请链接无效'); return; }
   var shared = getSharedEvents();
-  if (data.inviteCode && shared.some(function(e) { return e.inviteCode === data.inviteCode; })) {
-    showToast('你已经加入过这个纪念日了');
+  var existing = data.inviteCode ? shared.find(function(e) { return e.inviteCode === data.inviteCode; }) : null;
+  if (existing) {
+    if (hasEventChanged(existing, data)) {
+      showUpdateModal(data, existing);
+    } else {
+      showToast('已是最新，无需更新');
+    }
     window.history.replaceState({}, '', window.location.pathname);
     return;
   }
+  showJoinModal(data);
+  window.history.replaceState({}, '', window.location.pathname);
+}
+
+function showJoinModal(data) {
   pendingJoinData = data;
+  pendingJoinMode = 'join';
   var info = getEventTypeInfo(data.type || 'anniversary');
   document.getElementById('joinTitle').textContent = (data.owner || '好友') + ' 邀请你加入';
   document.getElementById('joinDesc').innerHTML = info.icon + ' <strong>' + data.title + '</strong><br>日期：' + formatDate(data.date) + '<br>类型：' + info.label + '<br>加入后双方都会收到提醒通知 \uD83D\uDC9E';
+  document.getElementById('btnJoinConfirm').textContent = '加入';
   document.getElementById('joinModal').classList.add('show');
-  window.history.replaceState({}, '', window.location.pathname);
+}
+
+function showUpdateModal(data, existing) {
+  pendingJoinData = data;
+  pendingJoinMode = 'update';
+  var info = getEventTypeInfo(data.type || 'anniversary');
+  var changes = getEventChanges(existing, data);
+  document.getElementById('joinTitle').textContent = (data.owner || '好友') + ' 更新了纪念日';
+  document.getElementById('joinDesc').innerHTML = info.icon + ' <strong>' + data.title + '</strong><br>' + changes + '<br><span style="color:#888;font-size:12px;">点击「更新」同步最新信息</span>';
+  document.getElementById('btnJoinConfirm').textContent = '更新';
+  document.getElementById('joinModal').classList.add('show');
+}
+
+function hasEventChanged(local, remote) {
+  return local.title !== remote.title ||
+         local.date !== remote.date ||
+         (local.note || '') !== (remote.note || '') ||
+         (local.type || 'anniversary') !== (remote.type || 'anniversary') ||
+         (local.repeat || 'yearly') !== (remote.repeat || 'yearly');
+}
+
+function getEventChanges(local, remote) {
+  var changes = [];
+  if (local.title !== remote.title) changes.push('名称：' + local.title + ' \u2192 ' + remote.title);
+  if (local.date !== remote.date) changes.push('日期：' + formatDate(local.date) + ' \u2192 ' + formatDate(remote.date));
+  if ((local.note || '') !== (remote.note || '')) changes.push('备注：' + (remote.note || '(无)'));
+  if ((local.type || 'anniversary') !== (remote.type || 'anniversary')) {
+    var oldInfo = getEventTypeInfo(local.type || 'anniversary');
+    var newInfo = getEventTypeInfo(remote.type || 'anniversary');
+    changes.push('类型：' + oldInfo.label + ' \u2192 ' + newInfo.label);
+  }
+  return changes.join('<br>');
 }
 
 function bindNavigation() {
@@ -1156,8 +1200,15 @@ function handleEventSave() {
   }
   if (id) {
     var existing = getEventById(id);
-    if (existing && existing.isShared) { updateSharedEvent(id, eventData); }
-    else { saveEvent(Object.assign({ id: id }, eventData)); }
+    if (existing && existing.isShared) {
+      var updated = updateSharedEvent(id, eventData);
+      closeEventModal(); showToast('已保存');
+      if (isIOSApp) { cancelEventNotifications(id); scheduleAllNotifications(); }
+      refreshCurrentPage(); try { checkReminders(); } catch(e) {}
+      if (updated) promptShareUpdate(updated);
+      return;
+    }
+    saveEvent(Object.assign({ id: id }, eventData));
     showToast('已保存');
     if (isIOSApp) { cancelEventNotifications(id); scheduleAllNotifications(); }
   } else {
@@ -1217,22 +1268,53 @@ function showShareLink(event) {
   document.getElementById('codeModal').classList.add('show');
 }
 
+function promptShareUpdate(event) {
+  var link = generateShareLink(event);
+  var text = '纪念日「' + event.title + '」信息已更新\n点击链接同步最新信息：\n' + link;
+  if (navigator.share) {
+    setTimeout(function() { navigator.share({ title: '纪念日更新', text: text, url: link }); }, 500);
+  } else {
+    if (navigator.clipboard) navigator.clipboard.writeText(text);
+    setTimeout(function() { showToast('更新链接已复制，发给对方同步'); }, 300);
+  }
+}
+
 function bindJoinModal() {
   var modal = document.getElementById('joinModal');
-  document.getElementById('btnJoinCancel').addEventListener('click', function() { modal.classList.remove('show'); pendingJoinData = null; });
-  modal.addEventListener('click', function(e) { if (e.target === modal) { modal.classList.remove('show'); pendingJoinData = null; } });
+  document.getElementById('btnJoinCancel').addEventListener('click', function() { modal.classList.remove('show'); pendingJoinData = null; pendingJoinMode = null; });
+  modal.addEventListener('click', function(e) { if (e.target === modal) { modal.classList.remove('show'); pendingJoinData = null; pendingJoinMode = null; } });
   document.getElementById('btnJoinConfirm').addEventListener('click', function() {
     if (!pendingJoinData) return;
+    if (pendingJoinMode === 'update') {
+      var shared = getSharedEvents();
+      var idx = shared.findIndex(function(e) { return e.inviteCode === pendingJoinData.inviteCode; });
+      if (idx >= 0) {
+        shared[idx].title = pendingJoinData.title;
+        shared[idx].date = pendingJoinData.date;
+        shared[idx].type = pendingJoinData.type || 'anniversary';
+        shared[idx].repeat = pendingJoinData.repeat || 'yearly';
+        shared[idx].note = pendingJoinData.note || '';
+        shared[idx].lunar = pendingJoinData.lunar || false;
+        shared[idx].reminders = pendingJoinData.reminders || [0, 1];
+        saveData(STORAGE_KEYS.shared, shared);
+        modal.classList.remove('show');
+        showToast('已同步最新信息 \u2713');
+        navigateTo('shared');
+      } else {
+        showToast('找不到原事件');
+      }
+      pendingJoinData = null; pendingJoinMode = null;
+      return;
+    }
     var profile = getProfile();
     var result = importSharedEvent(pendingJoinData, profile.name);
     modal.classList.remove('show');
     if (result.success) {
-      showToast('加入成功！双方都会收到提醒 💞');
-      if (isIOSApp) scheduleAllNotifications();
+      showToast('加入成功！双方都会收到提醒 \uD83D\uDC9E');
       navigateTo('shared');
     }
     else showToast(result.error);
-    pendingJoinData = null;
+    pendingJoinData = null; pendingJoinMode = null;
   });
 }
 
