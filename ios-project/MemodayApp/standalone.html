@@ -453,17 +453,25 @@ function createSharedEvent(eventData, ownerName) {
     id: 'shr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
     isShared: true, inviteCode: code, owner: ownerName || '我',
     members: [{ name: ownerName || '我', isOwner: true, joinedAt: Date.now() }],
-    createdAt: Date.now()
+    createdAt: Date.now(), updatedAt: Date.now()
   });
   shared.push(event);
   saveData(STORAGE_KEYS.shared, shared);
+  syncSaveEvent(event);
   return event;
 }
-function deleteSharedEvent(id) { saveData(STORAGE_KEYS.shared, getSharedEvents().filter(function(e) { return e.id !== id; })); }
+  return event;
+}
+function deleteSharedEvent(id) { saveData(STORAGE_KEYS.shared, getSharedEvents().filter(function(e) { return e.id !== id; })); syncDeleteEvent(id); }
 function updateSharedEvent(id, updates) {
   var shared = getSharedEvents();
   var idx = shared.findIndex(function(e) { return e.id === id; });
-  if (idx >= 0) { shared[idx] = Object.assign({}, shared[idx], updates); saveData(STORAGE_KEYS.shared, shared); return shared[idx]; }
+  if (idx >= 0) {
+    shared[idx] = Object.assign({}, shared[idx], updates, { updatedAt: Date.now() });
+    saveData(STORAGE_KEYS.shared, shared);
+    syncSaveEvent(shared[idx]);
+    return shared[idx];
+  }
   return null;
 }
 
@@ -497,9 +505,10 @@ function importSharedEvent(data, myName) {
       { name: myName || '我', isOwner: false, joinedAt: Date.now() }
     ],
     createdAt: Date.now()
-  };
+  ;
   shared.push(event);
   saveData(STORAGE_KEYS.shared, shared);
+  syncSaveEvent(event);
   return { success: true, event: event };
 }
 function generateShareLink(event) {
@@ -518,6 +527,239 @@ function generateInviteCode() {
   for (var i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
   if (getSharedEvents().some(function(e) { return e.inviteCode === code; })) return generateInviteCode();
   return code;
+}
+
+// ========== 云端同步模块 (Supabase) ==========
+// 【配置】把下面两个值替换成你 Supabase 项目的 URL 和 anon key
+var SUPABASE_URL = '';   // 例: https://xxxxx.supabase.co
+var SUPABASE_KEY = '';   // 例: eyJhbGciOiJIUzI1NiIsInR5cCI6...
+var SYNC_KEY = 'memoday_sync';
+var syncToken = null, syncUid = null, syncRoomId = null, syncEnabled = false;
+var syncPairCode = '', syncPartnerName = '';
+var syncPollTimer = null;
+
+function getSyncData() { return loadData(SYNC_KEY) || {}; }
+function saveSyncData(data) { saveData(SYNC_KEY, data); }
+
+function syncIsConfigured() { return SUPABASE_URL && SUPABASE_KEY; }
+
+async function syncInit() {
+  if (!syncIsConfigured()) return;
+  var stored = getSyncData();
+  if (stored.access_token) {
+    syncToken = stored.access_token;
+    syncUid = stored.uid;
+    syncRoomId = stored.roomId || null;
+    syncPairCode = stored.pairCode || '';
+    syncPartnerName = stored.partnerName || '';
+    var valid = await syncVerifyToken();
+    if (!valid) { await syncAnonymousLogin(); }
+  } else {
+    await syncAnonymousLogin();
+  }
+  if (syncRoomId) {
+    await syncLoadEvents();
+    await syncLoadMembers();
+    syncStartPolling();
+  }
+}
+
+async function syncVerifyToken() {
+  try {
+    var res = await fetch(SUPABASE_URL + '/auth/v1/user', {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + syncToken }
+    });
+    return res.ok;
+  } catch(e) { return false; }
+}
+
+async function syncAnonymousLogin() {
+  try {
+    var res = await fetch(SUPABASE_URL + '/auth/v1/signup', {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    if (res.ok) {
+      var data = await res.json();
+      syncToken = data.access_token;
+      syncUid = data.user.id;
+      var d = getSyncData();
+      d.access_token = syncToken; d.uid = syncUid;
+      saveSyncData(d);
+      syncEnabled = true;
+    }
+  } catch(e) { console.log('[Sync] login failed', e); }
+}
+
+function syncHeaders() {
+  return {
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + syncToken,
+    'Content-Type': 'application/json'
+  };
+}
+
+async function syncCreateRoom(name) {
+  if (!syncToken) await syncAnonymousLogin();
+  var code = generatePairCode();
+  try {
+    var res = await fetch(SUPABASE_URL + '/rest/v1/rooms', {
+      method: 'POST',
+      headers: Object.assign({}, syncHeaders(), { 'Prefer': 'return=representation' }),
+      body: JSON.stringify({ pair_code: code, created_by: syncUid })
+    });
+    if (!res.ok) return { success: false, error: '创建房间失败' };
+    var data = await res.json();
+    syncRoomId = data[0].id;
+    syncPairCode = code;
+    await syncAddMember(syncRoomId, name, true);
+    var d = getSyncData();
+    d.roomId = syncRoomId; d.pairCode = code;
+    saveSyncData(d);
+    syncStartPolling();
+    return { success: true, code: code };
+  } catch(e) { return { success: false, error: '网络错误' }; }
+}
+
+async function syncJoinRoom(code, name) {
+  if (!syncToken) await syncAnonymousLogin();
+  code = code.trim().toUpperCase();
+  try {
+    var res = await fetch(SUPABASE_URL + '/rest/v1/rooms?pair_code=eq.' + code, {
+      headers: syncHeaders()
+    });
+    if (!res.ok) return { success: false, error: '查询失败' };
+    var rooms = await res.json();
+    if (rooms.length === 0) return { success: false, error: '配对码无效' };
+    syncRoomId = rooms[0].id;
+    syncPairCode = code;
+    await syncAddMember(syncRoomId, name, false);
+    var d = getSyncData();
+    d.roomId = syncRoomId; d.pairCode = code;
+    saveSyncData(d);
+    await syncLoadEvents();
+    await syncLoadMembers();
+    syncStartPolling();
+    return { success: true };
+  } catch(e) { return { success: false, error: '网络错误' }; }
+}
+
+async function syncAddMember(roomId, name, isOwner) {
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/room_members', {
+      method: 'POST',
+      headers: Object.assign({}, syncHeaders(), { 'Prefer': 'resolution=merge-duplicates' }),
+      body: JSON.stringify({ room_id: roomId, uid: syncUid, name: name, is_owner: isOwner })
+    });
+  } catch(e) {}
+}
+
+async function syncLoadMembers() {
+  if (!syncRoomId) return;
+  try {
+    var res = await fetch(SUPABASE_URL + '/rest/v1/room_members?room_id=eq.' + syncRoomId, {
+      headers: syncHeaders()
+    });
+    if (res.ok) {
+      var members = await res.json();
+      var other = members.find(function(m) { return m.uid !== syncUid; });
+      syncPartnerName = other ? other.name : '';
+      var d = getSyncData(); d.partnerName = syncPartnerName; saveSyncData(d);
+    }
+  } catch(e) {}
+}
+
+async function syncSaveEvent(event) {
+  if (!syncRoomId) return;
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/events', {
+      method: 'POST',
+      headers: Object.assign({}, syncHeaders(), { 'Prefer': 'resolution=merge-duplicates' }),
+      body: JSON.stringify({ id: event.id, room_id: syncRoomId, data: event, updated_by: syncUid })
+    });
+  } catch(e) { console.log('[Sync] save event failed', e); }
+}
+
+async function syncDeleteEvent(id) {
+  if (!syncRoomId) return;
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/events?id=eq.' + id + '&room_id=eq.' + syncRoomId, {
+      method: 'DELETE',
+      headers: syncHeaders()
+    });
+  } catch(e) {}
+}
+
+async function syncLoadEvents() {
+  if (!syncRoomId) return;
+  try {
+    var res = await fetch(SUPABASE_URL + '/rest/v1/events?room_id=eq.' + syncRoomId + '&order=updated_at.desc', {
+      headers: syncHeaders()
+    });
+    if (res.ok) {
+      var rows = await res.json();
+      var cloudEvents = rows.map(function(r) { return r.data; });
+      var localShared = getSharedEvents();
+      var merged = mergeEvents(localShared, cloudEvents);
+      saveData(STORAGE_KEYS.shared, merged);
+      if (typeof refreshCurrentPage === 'function') refreshCurrentPage();
+      if (typeof scheduleAllNotifications === 'function' && isIOSApp) scheduleAllNotifications();
+    }
+  } catch(e) { console.log('[Sync] load events failed', e); }
+}
+
+function mergeEvents(local, cloud) {
+  var byId = {};
+  local.forEach(function(e) { byId[e.id] = e; });
+  cloud.forEach(function(e) {
+    if (!byId[e.id]) { byId[e.id] = e; }
+    else {
+      var localUpdate = byId[e.id].updatedAt || byId[e.id].createdAt || 0;
+      var cloudUpdate = e.updatedAt || e.createdAt || 0;
+      if (cloudUpdate > localUpdate) byId[e.id] = e;
+    }
+  });
+  return Object.values(byId);
+}
+
+function generatePairCode() {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var code = '';
+  for (var i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+function syncStartPolling() {
+  if (syncPollTimer) clearInterval(syncPollTimer);
+  syncPollTimer = setInterval(syncLoadEvents, 30000);
+}
+
+function syncStopPolling() {
+  if (syncPollTimer) { clearInterval(syncPollTimer); syncPollTimer = null; }
+}
+
+async function syncDisconnect() {
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/room_members?room_id=eq.' + syncRoomId + '&uid=eq.' + syncUid, {
+      method: 'DELETE',
+      headers: syncHeaders()
+    });
+  } catch(e) {}
+  syncStopPolling();
+  syncRoomId = null; syncPairCode = ''; syncPartnerName = '';
+  var d = getSyncData();
+  d.roomId = null; d.pairCode = ''; d.partnerName = '';
+  saveSyncData(d);
+}
+
+function syncGetStatus() {
+  return {
+    enabled: !!syncRoomId,
+    pairCode: syncPairCode,
+    partnerName: syncPartnerName,
+    isOwner: getSyncData().pairCode ? true : false
+  };
 }
 
 // ========== 日期工具 ==========
@@ -903,6 +1145,7 @@ function init() {
     navigateTo('home');
     try { startReminderCheck(); } catch(e) {}
     try { checkUrlJoin(); } catch(e) {}
+    try { syncInit(); } catch(e) {}
     window.addEventListener('editevent', function(e) { openEventModal(e.detail); });
   } catch(e) {
     console.error('Init error:', e);
@@ -1134,13 +1377,75 @@ function renderSharedPage() {
   });
 }
 
+function buildSyncSection() {
+  var status = syncGetStatus();
+  if (!syncIsConfigured()) {
+    return '<div class="settings-group"><div class="settings-item" id="settingSyncHint"><div class="settings-icon" style="background:rgba(156,163,175,0.1)">☁️</div><div class="settings-label">云端同步</div><div class="settings-value">未配置</div></div></div>';
+  }
+  if (status.enabled) {
+    return '<div class="settings-group"><div class="settings-item" id="settingSyncStatus"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">☁️</div><div class="settings-label">云端同步</div><div class="settings-value">' + status.pairCode + '</div><div class="settings-arrow">›</div></div></div>';
+  }
+  return '<div class="settings-group"><div class="settings-item" id="settingSyncCreate"><div class="settings-icon" style="background:rgba(59,130,246,0.1)">☁️</div><div class="settings-label">创建配对房间</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingSyncJoin"><div class="settings-icon" style="background:rgba(168,85,247,0.1)">🔑</div><div class="settings-label">输入配对码加入</div><div class="settings-arrow">›</div></div></div>';
+}
+
+function bindSyncEvents() {
+  var createBtn = document.getElementById('settingSyncCreate');
+  var joinBtn = document.getElementById('settingSyncJoin');
+  var statusBtn = document.getElementById('settingSyncStatus');
+  if (createBtn) {
+    createBtn.addEventListener('click', async function() {
+      var profile = getProfile();
+      showToast('正在创建配对房间...');
+      var result = await syncCreateRoom(profile.name);
+      if (result.success) {
+        showToast('配对码：' + result.code + '（发给对方输入即可配对）');
+        renderSettingsPage();
+      } else {
+        showToast(result.error);
+      }
+    });
+  }
+  if (joinBtn) {
+    joinBtn.addEventListener('click', function() {
+      var code = prompt('输入对方给你的6位配对码', '');
+      if (code && code.trim()) {
+        var profile = getProfile();
+        showToast('正在加入...');
+        syncJoinRoom(code, profile.name).then(function(result) {
+          if (result.success) {
+            showToast('配对成功！共享事件将自动同步');
+            renderSettingsPage();
+          } else {
+            showToast(result.error);
+          }
+        });
+      }
+    });
+  }
+  if (statusBtn) {
+    statusBtn.addEventListener('click', function() {
+      var status = syncGetStatus();
+      var msg = '配对码：' + status.pairCode + '\n';
+      msg += status.partnerName ? '已与 ' + status.partnerName + ' 配对成功' : '等待对方加入...';
+      msg += '\n\n把配对码发给对方，对方在设置中输入即可配对';
+      if (confirm(msg + '\n\n确定要断开同步吗？')) {
+        syncDisconnect().then(function() {
+          showToast('已断开同步');
+          renderSettingsPage();
+        });
+      }
+    });
+  }
+}
+
 function renderSettingsPage() {
   var container = document.getElementById('appContent');
   var profile = getProfile(), settings = getSettings(), notifStatus = getNotificationStatus();
   var totalEvents = getAllEvents().length;
   var notifText = { granted: '已开启', denied: '已拒绝', unsupported: '不支持', default: '未开启' }[notifStatus] || '未开启';
-  container.innerHTML = '<div class="page active"><div class="hero-card" style="text-align:center;padding:28px 20px;"><div style="font-size:56px;margin-bottom:8px;">' + profile.avatar + '</div><div class="hero-title" style="font-size:22px;">' + profile.name + '</div><div class="hero-subtitle">已记录 ' + totalEvents + ' 个重要日子</div></div><div class="settings-group"><div class="settings-item" id="settingNotif"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">🔔</div><div class="settings-label">通知提醒</div><div class="settings-value">' + notifText + '</div><div class="toggle ' + (settings.notifications ? 'on' : '') + '"></div></div><div class="settings-item" id="settingSound"><div class="settings-icon" style="background:rgba(245,158,11,0.1)">🔊</div><div class="settings-label">提醒声音</div><div class="toggle ' + (settings.sound ? 'on' : '') + '"></div></div><div class="settings-item" id="settingTest"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📋</div><div class="settings-label">发送测试通知</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item" id="settingName"><div class="settings-icon" style="background:rgba(59,130,246,0.1)">👤</div><div class="settings-label">我的昵称</div><div class="settings-value">' + profile.name + '</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingAvatar"><div class="settings-icon" style="background:rgba(255,107,157,0.1)">😊</div><div class="settings-label">我的头像</div><div class="settings-value">' + profile.avatar + '</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item" id="settingInstall" style="cursor:pointer;"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📱</div><div class="settings-label">安装到手机桌面</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingExport"><div class="settings-icon" style="background:rgba(168,85,247,0.1)">📤</div><div class="settings-label">导出数据</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingClear"><div class="settings-icon" style="background:rgba(239,68,68,0.1)">🗑️</div><div class="settings-label" style="color:var(--danger)">清空所有数据</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">📱</div><div class="settings-label">版本</div><div class="settings-value">v1.1.0</div></div><div class="settings-item"><div class="settings-icon" style="background:rgba(244,63,94,0.1)">💝</div><div class="settings-label">念念日历</div><div class="settings-value">念念不忘的日子</div></div></div></div>';
+  container.innerHTML = '<div class="page active"><div class="hero-card" style="text-align:center;padding:28px 20px;"><div style="font-size:56px;margin-bottom:8px;">' + profile.avatar + '</div><div class="hero-title" style="font-size:22px;">' + profile.name + '</div><div class="hero-subtitle">已记录 ' + totalEvents + ' 个重要日子</div></div><div class="settings-group"><div class="settings-item" id="settingNotif"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">🔔</div><div class="settings-label">通知提醒</div><div class="settings-value">' + notifText + '</div><div class="toggle ' + (settings.notifications ? 'on' : '') + '"></div></div><div class="settings-item" id="settingSound"><div class="settings-icon" style="background:rgba(245,158,11,0.1)">🔊</div><div class="settings-label">提醒声音</div><div class="toggle ' + (settings.sound ? 'on' : '') + '"></div></div><div class="settings-item" id="settingTest"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📋</div><div class="settings-label">发送测试通知</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item" id="settingName"><div class="settings-icon" style="background:rgba(59,130,246,0.1)">👤</div><div class="settings-label">我的昵称</div><div class="settings-value">' + profile.name + '</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingAvatar"><div class="settings-icon" style="background:rgba(255,107,157,0.1)">😊</div><div class="settings-label">我的头像</div><div class="settings-value">' + profile.avatar + '</div><div class="settings-arrow">›</div></div></div>' + buildSyncSection() + '<div class="settings-group"><div class="settings-item" id="settingInstall" style="cursor:pointer;"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📱</div><div class="settings-label">安装到手机桌面</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingExport"><div class="settings-icon" style="background:rgba(168,85,247,0.1)">📤</div><div class="settings-label">导出数据</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingClear"><div class="settings-icon" style="background:rgba(239,68,68,0.1)">🗑️</div><div class="settings-label" style="color:var(--danger)">清空所有数据</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">📱</div><div class="settings-label">版本</div><div class="settings-value">v1.1.0</div></div><div class="settings-item"><div class="settings-icon" style="background:rgba(244,63,94,0.1)">💝</div><div class="settings-label">念念日历</div><div class="settings-value">念念不忘的日子</div></div></div></div>';
   bindSettingsEvents(settings, profile);
+  bindSyncEvents();
 }
 
 function bindSettingsEvents(settings, profile) {
