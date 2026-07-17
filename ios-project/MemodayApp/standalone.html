@@ -407,6 +407,22 @@ html, body {
     </div>
   </div>
 
+  <div class="modal-overlay" id="pairModal">
+    <div class="modal-sheet" style="max-width:360px;border-radius:24px;">
+      <div class="sheet-handle"></div>
+      <div class="modal-body" style="padding:20px 24px 24px;text-align:center;">
+        <div style="font-size:44px;margin-bottom:12px;">🔑</div>
+        <h3 style="font-size:18px;margin-bottom:8px;">输入配对码</h3>
+        <p style="font-size:14px;color:var(--text-secondary);margin-bottom:16px;line-height:1.5;">输入对方给你的6位配对码，配对后共享纪念日将自动同步</p>
+        <input type="text" id="pairCodeInput" maxlength="6" placeholder="6位配对码" style="width:100%;padding:14px 16px;border:1.5px solid var(--border);border-radius:14px;font-size:20px;text-align:center;letter-spacing:8px;margin-bottom:16px;background:var(--bg-card);box-sizing:border-box;" autocomplete="off" autocorrect="off" autocapitalize="characters" />
+        <div class="form-actions" style="margin-top:0;">
+          <button class="btn-secondary" id="btnPairCancel">取消</button>
+          <button class="btn-primary" id="btnPairConfirm">配对</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script>
@@ -1140,6 +1156,7 @@ function init() {
     bindCodeModal();
     bindJoinModal();
     bindConfirmModal();
+    bindPairModal();
     navigateTo('home');
     try { startReminderCheck(); } catch(e) {}
     try { checkUrlJoin(); } catch(e) {}
@@ -1405,19 +1422,11 @@ function bindSyncEvents() {
   }
   if (joinBtn) {
     joinBtn.addEventListener('click', function() {
-      var code = prompt('输入对方给你的6位配对码', '');
-      if (code && code.trim()) {
-        var profile = getProfile();
-        showToast('正在加入...');
-        syncJoinRoom(code, profile.name).then(function(result) {
-          if (result.success) {
-            showToast('配对成功！共享事件将自动同步');
-            renderSettingsPage();
-          } else {
-            showToast(result.error);
-          }
-        });
-      }
+      var modal = document.getElementById('pairModal');
+      var input = document.getElementById('pairCodeInput');
+      input.value = '';
+      modal.classList.add('show');
+      setTimeout(function() { input.focus(); }, 300);
     });
   }
   if (statusBtn) {
@@ -1426,14 +1435,46 @@ function bindSyncEvents() {
       var msg = '配对码：' + status.pairCode + '\n';
       msg += status.partnerName ? '已与 ' + status.partnerName + ' 配对成功' : '等待对方加入...';
       msg += '\n\n把配对码发给对方，对方在设置中输入即可配对';
-      if (confirm(msg + '\n\n确定要断开同步吗？')) {
+      showConfirm('断开同步', '配对码：' + status.pairCode + '\n' + (status.partnerName ? '已与 ' + status.partnerName + ' 配对成功' : '等待对方加入...') + '\n\n确定要断开同步吗？', function() {
         syncDisconnect().then(function() {
           showToast('已断开同步');
           renderSettingsPage();
         });
-      }
+      });
     });
   }
+}
+
+function bindPairModal() {
+  var modal = document.getElementById('pairModal');
+  var input = document.getElementById('pairCodeInput');
+  document.getElementById('btnPairCancel').addEventListener('click', function() {
+    modal.classList.remove('show');
+  });
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) modal.classList.remove('show');
+  });
+  input.addEventListener('input', function() {
+    this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  });
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btnPairConfirm').click(); }
+  });
+  document.getElementById('btnPairConfirm').addEventListener('click', function() {
+    var code = input.value.trim();
+    if (!code || code.length < 6) { showToast('请输入6位配对码'); return; }
+    modal.classList.remove('show');
+    var profile = getProfile();
+    showToast('正在加入...');
+    syncJoinRoom(code, profile.name).then(function(result) {
+      if (result.success) {
+        showToast('配对成功！共享事件将自动同步');
+        renderSettingsPage();
+      } else {
+        showToast(result.error);
+      }
+    });
+  });
 }
 
 function renderSettingsPage() {

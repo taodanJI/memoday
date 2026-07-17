@@ -407,6 +407,22 @@ html, body {
     </div>
   </div>
 
+  <div class="modal-overlay" id="pairModal">
+    <div class="modal-sheet" style="max-width:360px;border-radius:24px;">
+      <div class="sheet-handle"></div>
+      <div class="modal-body" style="padding:20px 24px 24px;text-align:center;">
+        <div style="font-size:44px;margin-bottom:12px;">🔑</div>
+        <h3 style="font-size:18px;margin-bottom:8px;">输入配对码</h3>
+        <p style="font-size:14px;color:var(--text-secondary);margin-bottom:16px;line-height:1.5;">输入对方给你的6位配对码，配对后共享纪念日将自动同步</p>
+        <input type="text" id="pairCodeInput" maxlength="6" placeholder="6位配对码" style="width:100%;padding:14px 16px;border:1.5px solid var(--border);border-radius:14px;font-size:20px;text-align:center;letter-spacing:8px;margin-bottom:16px;background:var(--bg-card);box-sizing:border-box;" autocomplete="off" autocorrect="off" autocapitalize="characters" />
+        <div class="form-actions" style="margin-top:0;">
+          <button class="btn-secondary" id="btnPairCancel">取消</button>
+          <button class="btn-primary" id="btnPairConfirm">配对</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script>
@@ -453,17 +469,23 @@ function createSharedEvent(eventData, ownerName) {
     id: 'shr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
     isShared: true, inviteCode: code, owner: ownerName || '我',
     members: [{ name: ownerName || '我', isOwner: true, joinedAt: Date.now() }],
-    createdAt: Date.now()
+    createdAt: Date.now(), updatedAt: Date.now()
   });
   shared.push(event);
   saveData(STORAGE_KEYS.shared, shared);
+  syncSaveEvent(event);
   return event;
 }
-function deleteSharedEvent(id) { saveData(STORAGE_KEYS.shared, getSharedEvents().filter(function(e) { return e.id !== id; })); }
+function deleteSharedEvent(id) { saveData(STORAGE_KEYS.shared, getSharedEvents().filter(function(e) { return e.id !== id; })); syncDeleteEvent(id); }
 function updateSharedEvent(id, updates) {
   var shared = getSharedEvents();
   var idx = shared.findIndex(function(e) { return e.id === id; });
-  if (idx >= 0) { shared[idx] = Object.assign({}, shared[idx], updates); saveData(STORAGE_KEYS.shared, shared); return shared[idx]; }
+  if (idx >= 0) {
+    shared[idx] = Object.assign({}, shared[idx], updates, { updatedAt: Date.now() });
+    saveData(STORAGE_KEYS.shared, shared);
+    syncSaveEvent(shared[idx]);
+    return shared[idx];
+  }
   return null;
 }
 
@@ -500,10 +522,18 @@ function importSharedEvent(data, myName) {
   };
   shared.push(event);
   saveData(STORAGE_KEYS.shared, shared);
+  syncSaveEvent(event);
   return { success: true, event: event };
 }
 function generateShareLink(event) {
-  return window.location.origin + window.location.pathname + '?join=' + encodeShareData(event);
+  var encoded = encodeShareData(event);
+  // 始终使用在线网址作为分享链接（兼容所有平台）
+  // iPhone打开时网页会自动跳转到App，Android直接显示网页版加入弹窗
+  var baseUrl = 'https://ae53a3d49579416a965d69a733d66233.app.codebuddy.work/';
+  if (isIOSApp || isAndroidApp) {
+    return baseUrl + '?join=' + encoded;
+  }
+  return window.location.origin + window.location.pathname + '?join=' + encoded;
 }
 function generateInviteCode() {
   var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -511,6 +541,239 @@ function generateInviteCode() {
   for (var i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
   if (getSharedEvents().some(function(e) { return e.inviteCode === code; })) return generateInviteCode();
   return code;
+}
+
+// ========== 云端同步模块 (Supabase) ==========
+// 【配置】把下面两个值替换成你 Supabase 项目的 URL 和 anon key
+var SUPABASE_URL = 'https://unhkafyezggaabqztudg.supabase.co';
+var SUPABASE_KEY = 'sb_publishable_SPdKfEbFGFalR-W0iCMb-g_0_aVDNP-';
+var SYNC_KEY = 'memoday_sync';
+var syncToken = null, syncUid = null, syncRoomId = null, syncEnabled = false;
+var syncPairCode = '', syncPartnerName = '';
+var syncPollTimer = null;
+
+function getSyncData() { return loadData(SYNC_KEY) || {}; }
+function saveSyncData(data) { saveData(SYNC_KEY, data); }
+
+function syncIsConfigured() { return SUPABASE_URL && SUPABASE_KEY; }
+
+async function syncInit() {
+  if (!syncIsConfigured()) return;
+  var stored = getSyncData();
+  if (stored.access_token) {
+    syncToken = stored.access_token;
+    syncUid = stored.uid;
+    syncRoomId = stored.roomId || null;
+    syncPairCode = stored.pairCode || '';
+    syncPartnerName = stored.partnerName || '';
+    var valid = await syncVerifyToken();
+    if (!valid) { await syncAnonymousLogin(); }
+  } else {
+    await syncAnonymousLogin();
+  }
+  if (syncRoomId) {
+    await syncLoadEvents();
+    await syncLoadMembers();
+    syncStartPolling();
+  }
+}
+
+async function syncVerifyToken() {
+  try {
+    var res = await fetch(SUPABASE_URL + '/auth/v1/user', {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + syncToken }
+    });
+    return res.ok;
+  } catch(e) { return false; }
+}
+
+async function syncAnonymousLogin() {
+  try {
+    var res = await fetch(SUPABASE_URL + '/auth/v1/signup', {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    if (res.ok) {
+      var data = await res.json();
+      syncToken = data.access_token;
+      syncUid = data.user.id;
+      var d = getSyncData();
+      d.access_token = syncToken; d.uid = syncUid;
+      saveSyncData(d);
+      syncEnabled = true;
+    }
+  } catch(e) { console.log('[Sync] login failed', e); }
+}
+
+function syncHeaders() {
+  return {
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + syncToken,
+    'Content-Type': 'application/json'
+  };
+}
+
+async function syncCreateRoom(name) {
+  if (!syncToken) await syncAnonymousLogin();
+  var code = generatePairCode();
+  try {
+    var res = await fetch(SUPABASE_URL + '/rest/v1/rooms', {
+      method: 'POST',
+      headers: Object.assign({}, syncHeaders(), { 'Prefer': 'return=representation' }),
+      body: JSON.stringify({ pair_code: code, created_by: syncUid })
+    });
+    if (!res.ok) return { success: false, error: '创建房间失败' };
+    var data = await res.json();
+    syncRoomId = data[0].id;
+    syncPairCode = code;
+    await syncAddMember(syncRoomId, name, true);
+    var d = getSyncData();
+    d.roomId = syncRoomId; d.pairCode = code;
+    saveSyncData(d);
+    syncStartPolling();
+    return { success: true, code: code };
+  } catch(e) { return { success: false, error: '网络错误' }; }
+}
+
+async function syncJoinRoom(code, name) {
+  if (!syncToken) await syncAnonymousLogin();
+  code = code.trim().toUpperCase();
+  try {
+    var res = await fetch(SUPABASE_URL + '/rest/v1/rooms?pair_code=eq.' + code, {
+      headers: syncHeaders()
+    });
+    if (!res.ok) return { success: false, error: '查询失败' };
+    var rooms = await res.json();
+    if (rooms.length === 0) return { success: false, error: '配对码无效' };
+    syncRoomId = rooms[0].id;
+    syncPairCode = code;
+    await syncAddMember(syncRoomId, name, false);
+    var d = getSyncData();
+    d.roomId = syncRoomId; d.pairCode = code;
+    saveSyncData(d);
+    await syncLoadEvents();
+    await syncLoadMembers();
+    syncStartPolling();
+    return { success: true };
+  } catch(e) { return { success: false, error: '网络错误' }; }
+}
+
+async function syncAddMember(roomId, name, isOwner) {
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/room_members', {
+      method: 'POST',
+      headers: Object.assign({}, syncHeaders(), { 'Prefer': 'resolution=merge-duplicates' }),
+      body: JSON.stringify({ room_id: roomId, uid: syncUid, name: name, is_owner: isOwner })
+    });
+  } catch(e) {}
+}
+
+async function syncLoadMembers() {
+  if (!syncRoomId) return;
+  try {
+    var res = await fetch(SUPABASE_URL + '/rest/v1/room_members?room_id=eq.' + syncRoomId, {
+      headers: syncHeaders()
+    });
+    if (res.ok) {
+      var members = await res.json();
+      var other = members.find(function(m) { return m.uid !== syncUid; });
+      syncPartnerName = other ? other.name : '';
+      var d = getSyncData(); d.partnerName = syncPartnerName; saveSyncData(d);
+    }
+  } catch(e) {}
+}
+
+async function syncSaveEvent(event) {
+  if (!syncRoomId) return;
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/events', {
+      method: 'POST',
+      headers: Object.assign({}, syncHeaders(), { 'Prefer': 'resolution=merge-duplicates' }),
+      body: JSON.stringify({ id: event.id, room_id: syncRoomId, data: event, updated_by: syncUid })
+    });
+  } catch(e) { console.log('[Sync] save event failed', e); }
+}
+
+async function syncDeleteEvent(id) {
+  if (!syncRoomId) return;
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/events?id=eq.' + id + '&room_id=eq.' + syncRoomId, {
+      method: 'DELETE',
+      headers: syncHeaders()
+    });
+  } catch(e) {}
+}
+
+async function syncLoadEvents() {
+  if (!syncRoomId) return;
+  try {
+    var res = await fetch(SUPABASE_URL + '/rest/v1/events?room_id=eq.' + syncRoomId + '&order=updated_at.desc', {
+      headers: syncHeaders()
+    });
+    if (res.ok) {
+      var rows = await res.json();
+      var cloudEvents = rows.map(function(r) { return r.data; });
+      var localShared = getSharedEvents();
+      var merged = mergeEvents(localShared, cloudEvents);
+      saveData(STORAGE_KEYS.shared, merged);
+      if (typeof refreshCurrentPage === 'function') refreshCurrentPage();
+      if (typeof scheduleAllNotifications === 'function' && isIOSApp) scheduleAllNotifications();
+    }
+  } catch(e) { console.log('[Sync] load events failed', e); }
+}
+
+function mergeEvents(local, cloud) {
+  var byId = {};
+  local.forEach(function(e) { byId[e.id] = e; });
+  cloud.forEach(function(e) {
+    if (!byId[e.id]) { byId[e.id] = e; }
+    else {
+      var localUpdate = byId[e.id].updatedAt || byId[e.id].createdAt || 0;
+      var cloudUpdate = e.updatedAt || e.createdAt || 0;
+      if (cloudUpdate > localUpdate) byId[e.id] = e;
+    }
+  });
+  return Object.values(byId);
+}
+
+function generatePairCode() {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var code = '';
+  for (var i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+function syncStartPolling() {
+  if (syncPollTimer) clearInterval(syncPollTimer);
+  syncPollTimer = setInterval(syncLoadEvents, 30000);
+}
+
+function syncStopPolling() {
+  if (syncPollTimer) { clearInterval(syncPollTimer); syncPollTimer = null; }
+}
+
+async function syncDisconnect() {
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/room_members?room_id=eq.' + syncRoomId + '&uid=eq.' + syncUid, {
+      method: 'DELETE',
+      headers: syncHeaders()
+    });
+  } catch(e) {}
+  syncStopPolling();
+  syncRoomId = null; syncPairCode = ''; syncPartnerName = '';
+  var d = getSyncData();
+  d.roomId = null; d.pairCode = ''; d.partnerName = '';
+  saveSyncData(d);
+}
+
+function syncGetStatus() {
+  return {
+    enabled: !!syncRoomId,
+    pairCode: syncPairCode,
+    partnerName: syncPartnerName,
+    isOwner: getSyncData().pairCode ? true : false
+  };
 }
 
 // ========== 日期工具 ==========
@@ -615,20 +878,27 @@ function formatCountdown(days) {
 }
 
 // ========== 通知系统 ==========
-// 检测是否运行在 iOS App 中（有原生桥接）
+// 检测运行环境
 var isIOSApp = !!(window.webkit && window.webkit.messageHandlers && window.__nativeBridgeReady);
-// 检测是否运行在 Android App 中（Capacitor 环境）
-var isAndroidApp = !!(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'android');
-// 是否在原生 App 中（iOS 或 Android）
-var isNativeApp = isIOSApp || isAndroidApp;
+var isAndroidApp = !!window.AndroidNative;
 
 function requestNotificationPermission() {
   if (isIOSApp) {
-    // iOS App: 使用原生通知，权限已在 App 启动时请求
+    // iOS App: 通过原生桥接请求权限（原生会检查状态，已授权不重复弹窗）
     if (window.__nativeNotif) {
       return window.__nativeNotif.requestPermission().then(function() { return true; }).catch(function() { return true; });
     }
     return Promise.resolve(true);
+  }
+  if (isAndroidApp) {
+    // Android App: 使用原生通知桥接
+    try {
+      var hasPerm = window.AndroidNative.hasNotificationPermission();
+      if (!hasPerm) {
+        window.AndroidNative.requestPermission();
+      }
+      return Promise.resolve(hasPerm);
+    } catch(e) { return Promise.resolve(false); }
   }
   // 浏览器环境：使用 Web Notification API
   if (!('Notification' in window)) return Promise.resolve(false);
@@ -641,6 +911,13 @@ function sendNotification(title, options) {
   if (isIOSApp) {
     // iOS App: 原生通知由 scheduleNotification 调度，这里不立即发送
     return;
+  }
+  if (isAndroidApp) {
+    // Android App: 使用原生通知桥接
+    try {
+      window.AndroidNative.sendNotification(title, options.body || '');
+      return;
+    } catch(e) {}
   }
   // 浏览器环境：使用 Web Notification API
   if (!('Notification' in window)) return;
@@ -657,9 +934,9 @@ function sendNotification(title, options) {
   } catch(e) {}
 }
 
-// iOS App: 调度本地通知
+// 原生App: 调度本地通知
 function scheduleNotificationForEvent(event, reminderDays) {
-  if (!isNativeApp) return;
+  if (!isIOSApp && !isAndroidApp) return;
   var nextDate = getNextOccurrence(event);
   if (!nextDate) return;
   var info = getEventTypeInfo(event.type);
@@ -667,20 +944,23 @@ function scheduleNotificationForEvent(event, reminderDays) {
   var notifId = 'memoday_' + event.id + '_' + reminderDays + 'd';
 
   if (reminderDays === 0) {
-    // 当天提醒：立即显示模拟横幅 + 1分钟后原生通知
-    if (window.__showFakeNotif) {
-      window.__showFakeNotif('【' + info.label + '】' + event.title, '今天是「' + event.title + '」！' + (event.note ? ' ' + event.note : ''));
+    // 当天提醒
+    var notifTitle = '【' + info.label + '】' + event.title;
+    var notifBody = '今天是「' + event.title + '」！' + (event.note ? ' ' + event.note : '');
+
+    if (isIOSApp && window.__showFakeNotif) {
+      window.__showFakeNotif(notifTitle, notifBody);
     }
-    window.__sendNativeNotificationIn(
-      '【' + info.label + '】' + event.title,
-      '今天是「' + event.title + '」！' + (event.note ? '\n' + event.note : ''),
-      notifId,
-      60
-    );
+    if (isIOSApp && window.__sendNativeNotificationIn) {
+      window.__sendNativeNotificationIn(notifTitle, notifBody, notifId, 60);
+    }
+    if (isAndroidApp && window.AndroidNative) {
+      try { window.AndroidNative.sendNotification(notifTitle, notifBody); } catch(e) {}
+    }
     return;
   }
 
-  // 非当天提醒：设为提醒日早上9点
+  // 非当天提醒
   var fireDate = new Date(nextDate);
   fireDate.setDate(fireDate.getDate() - reminderDays);
   fireDate.setHours(9, 0, 0, 0);
@@ -688,12 +968,21 @@ function scheduleNotificationForEvent(event, reminderDays) {
 
   var title = '【' + info.label + '提醒】' + event.title;
   var body = '还有' + reminderDays + '天就是「' + event.title + '」了' + (event.note ? '\n' + event.note : '');
-  window.__sendNativeNotification(title, body, notifId, fireDate.getTime());
+
+  if (isIOSApp && window.__sendNativeNotification) {
+    window.__sendNativeNotification(title, body, notifId, fireDate.getTime());
+  }
+  if (isAndroidApp && window.AndroidNative) {
+    var delaySec = Math.round((fireDate.getTime() - now.getTime()) / 1000);
+    if (delaySec > 0) {
+      try { window.AndroidNative.sendNotificationWithDelay(title, body, delaySec); } catch(e) {}
+    }
+  }
 }
 
-// iOS App: 为所有事件调度通知
+// 原生App: 为所有事件调度通知
 function scheduleAllNotifications() {
-  if (!isNativeApp) return;
+  if (!isIOSApp && !isAndroidApp) return;
   var events = getAllEvents();
   // 先取消所有旧通知
   if (window.__cancelAllNativeNotifications) window.__cancelAllNativeNotifications();
@@ -709,7 +998,7 @@ function scheduleAllNotifications() {
 
 // iOS App: 取消某个事件的所有通知
 function cancelEventNotifications(eventId) {
-  if (!isNativeApp) return;
+  if (!isIOSApp || !window.__nativeNotif) return;
   var reminders = [0, 1, 3, 7, 14, 30];
   for (var i = 0; i < reminders.length; i++) {
     var notifId = 'memoday_' + eventId + '_' + reminders[i] + 'd';
@@ -718,8 +1007,8 @@ function cancelEventNotifications(eventId) {
 }
 
 function checkReminders() {
-  if (isNativeApp) {
-    // iOS/Android App: 重新调度所有通知（事件可能有变化）
+  if (isIOSApp || isAndroidApp) {
+    // 原生App: 重新调度所有通知（事件可能有变化）
     scheduleAllNotifications();
     return { today: 0, tomorrow: 0 };
   }
@@ -762,15 +1051,27 @@ function checkReminders() {
 }
 
 function getNotificationStatus() {
-  if (isNativeApp) return 'granted'; // 原生 App 中我们假设已授权
+  if (isIOSApp) return 'granted'; // iOS App 中我们假设已授权
+  if (isAndroidApp) {
+    try {
+      return window.AndroidNative.hasNotificationPermission() ? 'granted' : 'default';
+    } catch(e) { return 'default'; }
+  }
   if (!('Notification' in window)) return 'unsupported';
   return Notification.permission;
 }
 
 var checkInterval = null;
 function startReminderCheck() {
-  if (isNativeApp) {
-    // iOS/Android App: 调度所有通知，然后每小时重新调度一次（以防事件变化）
+  if (isIOSApp) {
+    // iOS App: 调度所有通知，然后每小时重新调度一次（以防事件变化）
+    scheduleAllNotifications();
+    if (checkInterval) clearInterval(checkInterval);
+    checkInterval = setInterval(function() { scheduleAllNotifications(); }, 3600000);
+    return;
+  }
+  if (isAndroidApp) {
+    // Android App: 调度所有原生通知，每小时重新调度一次
     scheduleAllNotifications();
     if (checkInterval) clearInterval(checkInterval);
     checkInterval = setInterval(function() { scheduleAllNotifications(); }, 3600000);
@@ -784,8 +1085,8 @@ function startReminderCheck() {
 }
 
 function sendTestNotification() {
-  if (isNativeApp) {
-    // iOS/Android App: 立即显示模拟横幅（即时反馈）
+  if (isIOSApp) {
+    // iOS App: 立即显示模拟横幅（即时反馈）
     if (window.__showFakeNotif) window.__showFakeNotif('念念日历 🎉', '通知功能已开启！重要纪念日会提前提醒你。');
     // 同时调度原生通知（后台/锁屏时也能收到）
     var testId = 'memoday_test_' + Date.now();
@@ -793,6 +1094,14 @@ function sendTestNotification() {
       window.__sendNativeNotificationIn('念念日历 🎉', '通知功能已开启！重要纪念日会提前提醒你。', testId, 1);
     }
     showToast('测试通知已发送');
+    return;
+  }
+  if (isAndroidApp) {
+    // Android App: 直接发原生通知
+    try {
+      window.AndroidNative.sendNotification('念念日历 🎉', '通知功能已开启！重要纪念日会提前提醒你。');
+      showToast('测试通知已发送');
+    } catch(e) { showToast('通知发送失败'); }
     return;
   }
   sendNotification('念念日历 🎉', { body: '通知功能已开启！重要纪念日会提前提醒你。', tag: 'test_notification' });
@@ -847,9 +1156,11 @@ function init() {
     bindCodeModal();
     bindJoinModal();
     bindConfirmModal();
+    bindPairModal();
     navigateTo('home');
     try { startReminderCheck(); } catch(e) {}
     try { checkUrlJoin(); } catch(e) {}
+    try { syncInit(); } catch(e) {}
     window.addEventListener('editevent', function(e) { openEventModal(e.detail); });
   } catch(e) {
     console.error('Init error:', e);
@@ -857,35 +1168,39 @@ function init() {
 }
 
 function checkUrlJoin() {
+  // 原生App（iOS/Android）: 检查原生注入的 join 数据
+  if (window.__pendingJoinData) {
+    var rawJoin = window.__pendingJoinData;
+    window.__pendingJoinData = null;
+    // 支持 memoday://join?data=xxx 格式或纯 base64 数据
+    var encoded = rawJoin;
+    if (rawJoin.indexOf('memoday://') === 0) {
+      var match = rawJoin.match(/[?&]data=([^&]+)/);
+      if (match) encoded = decodeURIComponent(match[1]);
+    } else if (rawJoin.indexOf('http') === 0 && rawJoin.indexOf('join=') >= 0) {
+      var m2 = rawJoin.match(/[?&]join=([^&]+)/);
+      if (m2) encoded = decodeURIComponent(m2[1]);
+    }
+    var data = decodeShareData(encoded);
+    if (!data) { showToast('邀请链接无效'); return; }
+    var shared = getSharedEvents();
+    var existing = data.inviteCode ? shared.find(function(e) { return e.inviteCode === data.inviteCode; }) : null;
+    if (existing) {
+      // 已加入过 → 检查是否是更新
+      if (hasEventChanged(existing, data)) {
+        showUpdateModal(data, existing);
+      } else {
+        showToast('已是最新，无需更新');
+      }
+      return;
+    }
+    showJoinModal(data);
+    return;
+  }
+  // 浏览器/Web: 检查 URL 参数
   var params = new URLSearchParams(window.location.search);
   var joinData = params.get('join');
   if (!joinData) return;
-
-  // 如果是 iPhone/iPad 且不是在 App 内，尝试用 memoday:// 打开 App
-  var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
-  var isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
-  if (isIOS && !isStandalone) {
-    // 尝试通过 URL Scheme 打开 App
-    var appUrl = 'memoday://join?data=' + encodeURIComponent(joinData);
-    var iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = appUrl;
-    document.body.appendChild(iframe);
-    setTimeout(function() { document.body.removeChild(iframe); }, 2000);
-    // 如果 2.5 秒后还在当前页面（App 没打开），显示网页版加入弹窗
-    setTimeout(function() {
-      if (!document.hidden) {
-        showWebJoinModal(joinData);
-      }
-    }, 2500);
-    return;
-  }
-
-  // 非 iOS 或已在 App 内：直接显示加入弹窗
-  showWebJoinModal(joinData);
-}
-
-function showWebJoinModal(joinData) {
   var data = decodeShareData(joinData);
   if (!data) { showToast('邀请链接无效'); return; }
   var shared = getSharedEvents();
@@ -944,6 +1259,14 @@ function getEventChanges(local, remote) {
   }
   return changes.join('<br>');
 }
+
+// 原生App注入 join 数据的回调（来自URL Scheme或剪贴板检测）
+window.__setJoinData = function(joinStr) {
+  window.__pendingJoinData = joinStr;
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    try { checkUrlJoin(); } catch(e) { console.error('Join error:', e); }
+  }
+};
 
 function bindNavigation() {
   document.querySelectorAll('.tab-item').forEach(function(btn) {
@@ -1069,13 +1392,99 @@ function renderSharedPage() {
   });
 }
 
+function buildSyncSection() {
+  var status = syncGetStatus();
+  if (!syncIsConfigured()) {
+    return '<div class="settings-group"><div class="settings-item" id="settingSyncHint"><div class="settings-icon" style="background:rgba(156,163,175,0.1)">☁️</div><div class="settings-label">云端同步</div><div class="settings-value">未配置</div></div></div>';
+  }
+  if (status.enabled) {
+    return '<div class="settings-group"><div class="settings-item" id="settingSyncStatus"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">☁️</div><div class="settings-label">云端同步</div><div class="settings-value">' + status.pairCode + '</div><div class="settings-arrow">›</div></div></div>';
+  }
+  return '<div class="settings-group"><div class="settings-item" id="settingSyncCreate"><div class="settings-icon" style="background:rgba(59,130,246,0.1)">☁️</div><div class="settings-label">创建配对房间</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingSyncJoin"><div class="settings-icon" style="background:rgba(168,85,247,0.1)">🔑</div><div class="settings-label">输入配对码加入</div><div class="settings-arrow">›</div></div></div>';
+}
+
+function bindSyncEvents() {
+  var createBtn = document.getElementById('settingSyncCreate');
+  var joinBtn = document.getElementById('settingSyncJoin');
+  var statusBtn = document.getElementById('settingSyncStatus');
+  if (createBtn) {
+    createBtn.addEventListener('click', async function() {
+      var profile = getProfile();
+      showToast('正在创建配对房间...');
+      var result = await syncCreateRoom(profile.name);
+      if (result.success) {
+        showToast('配对码：' + result.code + '（发给对方输入即可配对）');
+        renderSettingsPage();
+      } else {
+        showToast(result.error);
+      }
+    });
+  }
+  if (joinBtn) {
+    joinBtn.addEventListener('click', function() {
+      var modal = document.getElementById('pairModal');
+      var input = document.getElementById('pairCodeInput');
+      input.value = '';
+      modal.classList.add('show');
+      setTimeout(function() { input.focus(); }, 300);
+    });
+  }
+  if (statusBtn) {
+    statusBtn.addEventListener('click', function() {
+      var status = syncGetStatus();
+      var msg = '配对码：' + status.pairCode + '\n';
+      msg += status.partnerName ? '已与 ' + status.partnerName + ' 配对成功' : '等待对方加入...';
+      msg += '\n\n把配对码发给对方，对方在设置中输入即可配对';
+      showConfirm('断开同步', '配对码：' + status.pairCode + '\n' + (status.partnerName ? '已与 ' + status.partnerName + ' 配对成功' : '等待对方加入...') + '\n\n确定要断开同步吗？', function() {
+        syncDisconnect().then(function() {
+          showToast('已断开同步');
+          renderSettingsPage();
+        });
+      });
+    });
+  }
+}
+
+function bindPairModal() {
+  var modal = document.getElementById('pairModal');
+  var input = document.getElementById('pairCodeInput');
+  document.getElementById('btnPairCancel').addEventListener('click', function() {
+    modal.classList.remove('show');
+  });
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) modal.classList.remove('show');
+  });
+  input.addEventListener('input', function() {
+    this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  });
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btnPairConfirm').click(); }
+  });
+  document.getElementById('btnPairConfirm').addEventListener('click', function() {
+    var code = input.value.trim();
+    if (!code || code.length < 6) { showToast('请输入6位配对码'); return; }
+    modal.classList.remove('show');
+    var profile = getProfile();
+    showToast('正在加入...');
+    syncJoinRoom(code, profile.name).then(function(result) {
+      if (result.success) {
+        showToast('配对成功！共享事件将自动同步');
+        renderSettingsPage();
+      } else {
+        showToast(result.error);
+      }
+    });
+  });
+}
+
 function renderSettingsPage() {
   var container = document.getElementById('appContent');
   var profile = getProfile(), settings = getSettings(), notifStatus = getNotificationStatus();
   var totalEvents = getAllEvents().length;
   var notifText = { granted: '已开启', denied: '已拒绝', unsupported: '不支持', default: '未开启' }[notifStatus] || '未开启';
-  container.innerHTML = '<div class="page active"><div class="hero-card" style="text-align:center;padding:28px 20px;"><div style="font-size:56px;margin-bottom:8px;">' + profile.avatar + '</div><div class="hero-title" style="font-size:22px;">' + profile.name + '</div><div class="hero-subtitle">已记录 ' + totalEvents + ' 个重要日子</div></div><div class="settings-group"><div class="settings-item" id="settingNotif"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">🔔</div><div class="settings-label">通知提醒</div><div class="settings-value">' + notifText + '</div><div class="toggle ' + (settings.notifications ? 'on' : '') + '"></div></div><div class="settings-item" id="settingSound"><div class="settings-icon" style="background:rgba(245,158,11,0.1)">🔊</div><div class="settings-label">提醒声音</div><div class="toggle ' + (settings.sound ? 'on' : '') + '"></div></div><div class="settings-item" id="settingTest"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📋</div><div class="settings-label">发送测试通知</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item" id="settingName"><div class="settings-icon" style="background:rgba(59,130,246,0.1)">👤</div><div class="settings-label">我的昵称</div><div class="settings-value">' + profile.name + '</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingAvatar"><div class="settings-icon" style="background:rgba(255,107,157,0.1)">😊</div><div class="settings-label">我的头像</div><div class="settings-value">' + profile.avatar + '</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item" id="settingInstall" style="cursor:pointer;"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📱</div><div class="settings-label">安装到手机桌面</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingExport"><div class="settings-icon" style="background:rgba(168,85,247,0.1)">📤</div><div class="settings-label">导出数据</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingClear"><div class="settings-icon" style="background:rgba(239,68,68,0.1)">🗑️</div><div class="settings-label" style="color:var(--danger)">清空所有数据</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">📱</div><div class="settings-label">版本</div><div class="settings-value">v1.1.0</div></div><div class="settings-item"><div class="settings-icon" style="background:rgba(244,63,94,0.1)">💝</div><div class="settings-label">念念日历</div><div class="settings-value">念念不忘的日子</div></div></div></div>';
+  container.innerHTML = '<div class="page active"><div class="hero-card" style="text-align:center;padding:28px 20px;"><div style="font-size:56px;margin-bottom:8px;">' + profile.avatar + '</div><div class="hero-title" style="font-size:22px;">' + profile.name + '</div><div class="hero-subtitle">已记录 ' + totalEvents + ' 个重要日子</div></div><div class="settings-group"><div class="settings-item" id="settingNotif"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">🔔</div><div class="settings-label">通知提醒</div><div class="settings-value">' + notifText + '</div><div class="toggle ' + (settings.notifications ? 'on' : '') + '"></div></div><div class="settings-item" id="settingSound"><div class="settings-icon" style="background:rgba(245,158,11,0.1)">🔊</div><div class="settings-label">提醒声音</div><div class="toggle ' + (settings.sound ? 'on' : '') + '"></div></div><div class="settings-item" id="settingTest"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📋</div><div class="settings-label">发送测试通知</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item" id="settingName"><div class="settings-icon" style="background:rgba(59,130,246,0.1)">👤</div><div class="settings-label">我的昵称</div><div class="settings-value">' + profile.name + '</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingAvatar"><div class="settings-icon" style="background:rgba(255,107,157,0.1)">😊</div><div class="settings-label">我的头像</div><div class="settings-value">' + profile.avatar + '</div><div class="settings-arrow">›</div></div></div>' + buildSyncSection() + '<div class="settings-group"><div class="settings-item" id="settingInstall" style="cursor:pointer;"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📱</div><div class="settings-label">安装到手机桌面</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingExport"><div class="settings-icon" style="background:rgba(168,85,247,0.1)">📤</div><div class="settings-label">导出数据</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingClear"><div class="settings-icon" style="background:rgba(239,68,68,0.1)">🗑️</div><div class="settings-label" style="color:var(--danger)">清空所有数据</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">📱</div><div class="settings-label">版本</div><div class="settings-value">v1.1.0</div></div><div class="settings-item"><div class="settings-icon" style="background:rgba(244,63,94,0.1)">💝</div><div class="settings-label">念念日历</div><div class="settings-value">念念不忘的日子</div></div></div></div>';
   bindSettingsEvents(settings, profile);
+  bindSyncEvents();
 }
 
 function bindSettingsEvents(settings, profile) {
@@ -1191,11 +1600,13 @@ function handleEventSave() {
   document.querySelectorAll('#reminderOptions input:checked').forEach(function(input) { reminders.push(parseInt(input.value)); });
   if (!title || !date) { showToast('请填写事件名称和日期'); return; }
   var eventData = { title: title, date: date, type: selectedType, repeat: repeat, note: note, lunar: lunar, reminders: reminders };
+  // 保存事件时请求通知权限（仅首次，已授权不会重复弹窗）
+  requestNotificationPermission();
   if (isSharedCreate) {
     var profile = getProfile();
     var event = createSharedEvent(eventData, profile.name);
     closeEventModal(); showToast('共享纪念日已创建'); showShareLink(event);
-    if (isIOSApp) scheduleAllNotifications();
+    scheduleAllNotifications();
     refreshCurrentPage(); return;
   }
   if (id) {
@@ -1203,18 +1614,19 @@ function handleEventSave() {
     if (existing && existing.isShared) {
       var updated = updateSharedEvent(id, eventData);
       closeEventModal(); showToast('已保存');
-      if (isIOSApp) { cancelEventNotifications(id); scheduleAllNotifications(); }
+      cancelEventNotifications(id); scheduleAllNotifications();
       refreshCurrentPage(); try { checkReminders(); } catch(e) {}
+      // 自动提示分享更新链接给对方
       if (updated) promptShareUpdate(updated);
       return;
     }
     saveEvent(Object.assign({ id: id }, eventData));
     showToast('已保存');
-    if (isIOSApp) { cancelEventNotifications(id); scheduleAllNotifications(); }
+    cancelEventNotifications(id); scheduleAllNotifications();
   } else {
     var newEvent = saveEvent(eventData);
     showToast('已创建');
-    if (isIOSApp) scheduleAllNotifications();
+    scheduleAllNotifications();
   }
   closeEventModal(); refreshCurrentPage(); try { checkReminders(); } catch(e) {}
 }
@@ -1249,14 +1661,30 @@ function bindCodeModal() {
   document.getElementById('btnShareLink').addEventListener('click', function() {
     var link = document.getElementById('shareLinkDisplay').textContent;
     var profile = getProfile();
-    var text = profile.name + ' 邀请你一起记录纪念日「' + currentShareEventTitle + '」💞\n点击链接加入：\n' + link;
-    if (navigator.share) navigator.share({ title: '念念日历邀请', text: text, url: link });
-    else if (navigator.clipboard) navigator.clipboard.writeText(text).then(function() { showToast('邀请信息已复制，去发给好友吧'); });
+    var text = profile.name + ' 邀请你一起记录纪念日「' + currentShareEventTitle + '」\uD83D\uDC9E\n点击链接加入：\n' + link;
+    // iOS App: 走原生分享面板
+    if (isIOSApp && window.__nativeShareText) {
+      window.__nativeShareText(text);
+    } else if (navigator.share) {
+      navigator.share({ title: '念念日历邀请', text: text, url: link });
+    } else if (isIOSApp && window.__nativeCopyText) {
+      window.__nativeCopyText(text);
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(function() { showToast('邀请信息已复制，去发给好友吧'); });
+    } else {
+      showToast('请手动长按复制链接');
+    }
   });
   document.getElementById('btnCopyLink').addEventListener('click', function() {
     var link = document.getElementById('shareLinkDisplay').textContent;
-    if (navigator.clipboard) navigator.clipboard.writeText(link).then(function() { showToast('链接已复制'); });
-    else showToast('请手动长按复制链接');
+    // iOS App: 走原生复制
+    if (isIOSApp && window.__nativeCopyText) {
+      window.__nativeCopyText(link);
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(link).then(function() { showToast('链接已复制'); });
+    } else {
+      showToast('请手动长按复制链接');
+    }
   });
 }
 
@@ -1271,9 +1699,18 @@ function showShareLink(event) {
 function promptShareUpdate(event) {
   var link = generateShareLink(event);
   var text = '纪念日「' + event.title + '」信息已更新\n点击链接同步最新信息：\n' + link;
-  if (navigator.share) {
+  // iOS App: 走原生分享面板
+  if (isIOSApp && window.__nativeShareText) {
+    setTimeout(function() { window.__nativeShareText(text); }, 500);
+  } else if (isAndroidApp && window.AndroidNative) {
+    setTimeout(function() {
+      try { window.AndroidNative.copyToClipboard(link); } catch(e) {}
+      showToast('更新链接已复制，发给对方同步');
+    }, 500);
+  } else if (navigator.share) {
     setTimeout(function() { navigator.share({ title: '纪念日更新', text: text, url: link }); }, 500);
   } else {
+    // 网页版：复制链接 + 提示
     if (navigator.clipboard) navigator.clipboard.writeText(text);
     setTimeout(function() { showToast('更新链接已复制，发给对方同步'); }, 300);
   }
@@ -1286,6 +1723,7 @@ function bindJoinModal() {
   document.getElementById('btnJoinConfirm').addEventListener('click', function() {
     if (!pendingJoinData) return;
     if (pendingJoinMode === 'update') {
+      // 更新已有共享事件
       var shared = getSharedEvents();
       var idx = shared.findIndex(function(e) { return e.inviteCode === pendingJoinData.inviteCode; });
       if (idx >= 0) {
@@ -1299,6 +1737,7 @@ function bindJoinModal() {
         saveData(STORAGE_KEYS.shared, shared);
         modal.classList.remove('show');
         showToast('已同步最新信息 \u2713');
+        if (isIOSApp || isAndroidApp) scheduleAllNotifications();
         navigateTo('shared');
       } else {
         showToast('找不到原事件');
@@ -1306,11 +1745,13 @@ function bindJoinModal() {
       pendingJoinData = null; pendingJoinMode = null;
       return;
     }
+    // 新加入
     var profile = getProfile();
     var result = importSharedEvent(pendingJoinData, profile.name);
     modal.classList.remove('show');
     if (result.success) {
       showToast('加入成功！双方都会收到提醒 \uD83D\uDC9E');
+      if (isIOSApp) scheduleAllNotifications();
       navigateTo('shared');
     }
     else showToast(result.error);
@@ -1444,6 +1885,5 @@ if (document.readyState === 'loading') {
       setTimeout(function() { b.style.display = 'none'; }, 280);
     });
   </script>
-  <script src="android-bridge.js"></script>
 </body>
 </html>
