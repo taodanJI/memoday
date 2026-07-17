@@ -589,6 +589,7 @@ async function syncVerifyToken() {
 
 async function syncAnonymousLogin() {
   try {
+    // 先试匿名登录
     var res = await fetch(SUPABASE_URL + '/auth/v1/signup', {
       method: 'POST',
       headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
@@ -602,8 +603,43 @@ async function syncAnonymousLogin() {
       d.access_token = syncToken; d.uid = syncUid;
       saveSyncData(d);
       syncEnabled = true;
+      return true;
     }
-  } catch(e) { console.log('[Sync] login failed', e); }
+    // 匿名登录不可用，改用自动生成邮箱+密码注册
+    var fakeEmail = 'u' + Date.now() + Math.random().toString(36).slice(2,8) + '@memoday.app';
+    var fakePass = 'Mp' + Math.random().toString(36).slice(2,12) + '!1';
+    var res2 = await fetch(SUPABASE_URL + '/auth/v1/signup', {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: fakeEmail, password: fakePass })
+    });
+    if (res2.ok) {
+      var data2 = await res2.json();
+      if (data2.access_token) {
+        syncToken = data2.access_token;
+        syncUid = data2.user.id;
+      } else {
+        // 需要登录拿token
+        var res3 = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', {
+          method: 'POST',
+          headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: fakeEmail, password: fakePass })
+        });
+        var data3 = await res3.json();
+        syncToken = data3.access_token;
+        syncUid = data3.user.id;
+      }
+      var d2 = getSyncData();
+      d2.access_token = syncToken; d2.uid = syncUid;
+      d2.fakeEmail = fakeEmail; d2.fakePass = fakePass;
+      saveSyncData(d2);
+      syncEnabled = true;
+      return true;
+    }
+    var errBody = await res2.text();
+    console.log('[Sync] signup failed:', res2.status, errBody);
+    return false;
+  } catch(e) { console.log('[Sync] login failed', e); return false; }
 }
 
 function syncHeaders() {
@@ -616,6 +652,7 @@ function syncHeaders() {
 
 async function syncCreateRoom(name) {
   if (!syncToken) await syncAnonymousLogin();
+  if (!syncToken) return { success: false, error: '登录失败，请检查网络' };
   var code = generatePairCode();
   try {
     var res = await fetch(SUPABASE_URL + '/rest/v1/rooms', {
@@ -623,7 +660,11 @@ async function syncCreateRoom(name) {
       headers: Object.assign({}, syncHeaders(), { 'Prefer': 'return=representation' }),
       body: JSON.stringify({ pair_code: code, created_by: syncUid })
     });
-    if (!res.ok) return { success: false, error: '创建房间失败' };
+    if (!res.ok) {
+      var errBody = await res.text();
+      console.log('[Sync] create room failed:', res.status, errBody);
+      return { success: false, error: '创建失败(' + res.status + '): ' + errBody.slice(0, 100) };
+    }
     var data = await res.json();
     syncRoomId = data[0].id;
     syncPairCode = code;
