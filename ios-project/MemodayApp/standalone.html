@@ -460,8 +460,6 @@ function createSharedEvent(eventData, ownerName) {
   syncSaveEvent(event);
   return event;
 }
-  return event;
-}
 function deleteSharedEvent(id) { saveData(STORAGE_KEYS.shared, getSharedEvents().filter(function(e) { return e.id !== id; })); syncDeleteEvent(id); }
 function updateSharedEvent(id, updates) {
   var shared = getSharedEvents();
@@ -505,7 +503,7 @@ function importSharedEvent(data, myName) {
       { name: myName || '我', isOwner: false, joinedAt: Date.now() }
     ],
     createdAt: Date.now()
-  ;
+  };
   shared.push(event);
   saveData(STORAGE_KEYS.shared, shared);
   syncSaveEvent(event);
