@@ -681,15 +681,18 @@ async function syncJoinRoom(code, name) {
   if (!syncToken) await syncAnonymousLogin();
   code = code.trim().toUpperCase();
   try {
-    var res = await fetch(SUPABASE_URL + '/rest/v1/rooms?pair_code=eq.' + code, {
-      headers: syncHeaders()
+    var res = await fetch(SUPABASE_URL + '/rest/v1/rpc/join_room_by_code', {
+      method: 'POST',
+      headers: syncHeaders(),
+      body: JSON.stringify({ target_pair_code: code, user_name: name })
     });
-    if (!res.ok) return { success: false, error: '查询失败' };
-    var rooms = await res.json();
-    if (rooms.length === 0) return { success: false, error: '配对码无效' };
-    syncRoomId = rooms[0].id;
+    if (!res.ok) {
+      var errText = await res.text();
+      return { success: false, error: '加入失败：' + (errText.includes('配对码无效') ? '配对码无效' : errText.slice(0, 60)) };
+    }
+    var roomId = await res.json();
+    syncRoomId = roomId;
     syncPairCode = code;
-    await syncAddMember(syncRoomId, name, false);
     var d = getSyncData();
     d.roomId = syncRoomId; d.pairCode = code;
     saveSyncData(d);

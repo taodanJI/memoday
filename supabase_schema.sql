@@ -43,27 +43,59 @@ drop trigger if exists events_updated_at on events;
 create trigger events_updated_at before update on events
 for each row execute function update_updated_at();
 
+-- 通过配对码加入房间（绕过 RLS，非成员无法查询 rooms 表）
+create or replace function join_room_by_code(target_pair_code text, user_name text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_room_id uuid;
+begin
+  select id into v_room_id from rooms where pair_code = target_pair_code;
+  if v_room_id is null then
+    raise exception '配对码无效';
+  end if;
+  insert into room_members (room_id, uid, name, is_owner)
+  values (v_room_id, auth.uid(), user_name, false)
+  on conflict (room_id, uid) do nothing;
+  return v_room_id;
+end;
+$$;
+
+-- ===== 辅助函数（security definer 绕过 RLS，避免递归）=====
+create or replace function get_user_rooms()
+returns setof uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  return query
+  select room_id from room_members where uid = auth.uid();
+end;
+$$;
+
 -- ===== 行级安全策略 (RLS) =====
 alter table rooms enable row level security;
 alter table room_members enable row level security;
 alter table events enable row level security;
 
--- 房间：成员可读
+-- 房间：创建者可读 + 同房间成员可读
 drop policy if exists "read rooms" on rooms;
 create policy "read rooms" on rooms for select to authenticated using (
-  exists (select 1 from room_members where room_members.room_id = rooms.id and room_members.uid = auth.uid())
+  created_by = auth.uid() or id in (select get_user_rooms())
 );
 
 -- 房间：已登录用户可创建
 drop policy if exists "create rooms" on rooms;
 create policy "create rooms" on rooms for insert to authenticated with check (created_by = auth.uid());
 
--- 成员：可读同房间成员
+-- 成员：自己可读 + 同房间成员可读
 drop policy if exists "read members" on room_members;
 create policy "read members" on room_members for select to authenticated using (
-  uid = auth.uid() or exists (
-    select 1 from room_members rm2 where rm2.room_id = room_members.room_id and rm2.uid = auth.uid()
-  )
+  uid = auth.uid() or room_id in (select get_user_rooms())
 );
 
 -- 成员：可加入自己
@@ -73,25 +105,25 @@ create policy "insert member" on room_members for insert to authenticated with c
 -- 事件：同房间成员可读
 drop policy if exists "read events" on events;
 create policy "read events" on events for select to authenticated using (
-  exists (select 1 from room_members where room_members.room_id = events.room_id and room_members.uid = auth.uid())
+  room_id in (select get_user_rooms())
 );
 
 -- 事件：同房间成员可写
 drop policy if exists "insert events" on events;
 create policy "insert events" on events for insert to authenticated with check (
-  exists (select 1 from room_members where room_members.room_id = events.room_id and room_members.uid = auth.uid())
+  room_id in (select get_user_rooms())
 );
 
 -- 事件：同房间成员可改
 drop policy if exists "update events" on events;
 create policy "update events" on events for update to authenticated using (
-  exists (select 1 from room_members where room_members.room_id = events.room_id and room_members.uid = auth.uid())
+  room_id in (select get_user_rooms())
 );
 
 -- 事件：同房间成员可删
 drop policy if exists "delete events" on events;
 create policy "delete events" on events for delete to authenticated using (
-  exists (select 1 from room_members where room_members.room_id = events.room_id and room_members.uid = auth.uid())
+  room_id in (select get_user_rooms())
 );
 
 -- 开启 Realtime（实时推送）
