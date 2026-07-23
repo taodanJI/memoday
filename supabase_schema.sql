@@ -70,14 +70,22 @@ set search_path = public
 as $$
 declare
   v_room_id uuid;
+  v_member_count int;
 begin
   select id into v_room_id from rooms where pair_code = target_pair_code;
   if v_room_id is null then
     raise exception '配对码无效';
   end if;
+  -- 每个房间最多两人（房主 + 伴侣），防止测试/重复匿名账号把房间撑爆
+  select count(*) into v_member_count from room_members where room_id = v_room_id;
+  if v_member_count >= 2 and not exists (
+    select 1 from room_members where room_id = v_room_id and uid = auth.uid()
+  ) then
+    raise exception '房间已满，只能有两位成员';
+  end if;
   insert into room_members (room_id, uid, name, is_owner)
   values (v_room_id, auth.uid(), user_name, false)
-  on conflict (room_id, uid) do nothing;
+  on conflict (room_id, uid) do update set name = excluded.name;
   return v_room_id;
 end;
 $$;
@@ -170,6 +178,7 @@ drop policy if exists "update own profile" on profiles;
 create policy "update own profile" on profiles for update to authenticated using (uid = auth.uid());
 
 -- 通过配对码查房间成员昵称头像（绕过 RLS，用于展示对方资料）
+-- 每个房间只保留最早的两位成员（房主 + 伴侣），避免测试账号重复加入导致显示混乱
 create or replace function get_room_profiles(target_room_id uuid)
 returns json
 language plpgsql
@@ -185,10 +194,14 @@ begin
     'avatar_type', coalesce(p.avatar_type, 'emoji'),
     'avatar_data', coalesce(p.avatar_data, '😊'),
     'is_owner', rm.is_owner
-  )), '[]'::json) into result
-  from room_members rm
-  left join profiles p on p.uid = rm.uid
-  where rm.room_id = target_room_id;
+  ) order by rm.joined_at), '[]'::json) into result
+  from (
+    select * from room_members
+    where room_id = target_room_id
+    order by joined_at
+    limit 2
+  ) rm
+  left join profiles p on p.uid = rm.uid;
   return result;
 end;
 $$;

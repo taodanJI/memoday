@@ -782,10 +782,15 @@ async function syncLoadMembers(forceRender) {
 async function syncSaveEvent(event) {
   if (!syncRoomId) return;
   try {
+    // 云端成员资料由 get_room_profiles 提供，事件 data 中不保存 members，避免本地旧数据污染云端
+    var cleanEvent = Object.assign({}, event);
+    delete cleanEvent.members;
+    delete cleanEvent.memberNames;
+    delete cleanEvent.memberBadges;
     await fetch(SUPABASE_URL + '/rest/v1/events', {
       method: 'POST',
       headers: Object.assign({}, syncHeaders(), { 'Prefer': 'resolution=merge-duplicates' }),
-      body: JSON.stringify({ id: event.id, room_id: syncRoomId, data: event, updated_by: syncUid })
+      body: JSON.stringify({ id: event.id, room_id: syncRoomId, data: cleanEvent, updated_by: syncUid })
     });
   } catch(e) { console.log('[Sync] save event failed', e); }
 }
@@ -809,11 +814,14 @@ async function syncLoadEvents() {
     if (res.ok) {
       var rows = await res.json();
       var cloudEvents = rows.map(function(r) { return r.data; });
+      // 云端是共享事件的唯一数据源，直接覆盖本地
       var localShared = getSharedEvents();
-      var merged = mergeEvents(localShared, cloudEvents);
-      saveData(STORAGE_KEYS.shared, merged);
-      if (typeof refreshCurrentPage === 'function') refreshCurrentPage();
-      if (typeof scheduleAllNotifications === 'function' && isIOSApp) scheduleAllNotifications();
+      var changed = JSON.stringify(cloudEvents) !== JSON.stringify(localShared);
+      saveData(STORAGE_KEYS.shared, cloudEvents);
+      if (changed) {
+        if (typeof refreshCurrentPage === 'function') refreshCurrentPage();
+        if (typeof scheduleAllNotifications === 'function' && isIOSApp) scheduleAllNotifications();
+      }
     }
   } catch(e) { console.log('[Sync] load events failed', e); }
 }
@@ -1616,37 +1624,37 @@ function renderSharedPage() {
   if (sharedEvents.length === 0) {
     html += '<div class="empty-state"><div class="empty-icon">💌</div><div class="empty-text">还没有共享纪念日</div><div class="empty-text" style="margin-top:8px;font-size:12px">点击右上角 + 创建</div></div>';
   } else {
-    // 优先用云端成员资料
-    var members = (syncRoomMembers && syncRoomMembers.length > 0) ? syncRoomMembers : [];
+    // 优先用云端成员资料，按 uid 去重
+    var members = [];
+    var seenUids = {};
+    (syncRoomMembers || []).forEach(function(m) {
+      if (m.uid && !seenUids[m.uid]) {
+        seenUids[m.uid] = true;
+        members.push(m);
+      }
+    });
+    // 没有云端资料时显示简单占位，不再回退到本地 event.members（本地数据可能过期或重复）
     if (members.length === 0) {
-      // 回退到本地 event.members
-      var firstEvent = sharedEvents[0];
-      members = (firstEvent && firstEvent.members) ? firstEvent.members : [];
+      members = [{ uid: syncUid, name: '我', avatar_type: 'emoji', avatar_data: '😊', is_owner: true }];
     }
     html += '<div class="section-title">共享列表 · ' + sharedEvents.length + '</div>';
     for (var i = 0; i < sharedEvents.length; i++) {
       var event = sharedEvents[i], info = getEventTypeInfo(event.type), days = daysUntilNext(event);
       var memberBadges = members.map(function(m) {
-        var hasUid = typeof m.uid !== 'undefined';
-        var isMe = hasUid && m.uid === syncUid;
+        var isMe = m.uid === syncUid;
         var displayName = isMe ? '我' : (m.name || '?');
         var avatarHtml;
         if (m.avatar_type === 'upload' && m.avatar_data) {
           avatarHtml = '<img src="' + m.avatar_data + '" style="width:100%;height:100%;object-fit:cover;object-position:center center;display:block;border-radius:50%;" />';
         } else if (m.avatar_type === 'emoji' && m.avatar_data) {
           avatarHtml = '<span style="font-size:13px;line-height:1;">' + m.avatar_data + '</span>';
-        } else if (!hasUid && m.name) {
-          // 本地旧数据回退：用名字首字
-          avatarHtml = '<span style="font-size:11px;font-weight:600;">' + (displayName).charAt(0) + '</span>';
         } else {
           avatarHtml = '<span style="font-size:11px;font-weight:600;">' + (displayName).charAt(0) + '</span>';
         }
-        var isOwner = typeof m.is_owner !== 'undefined' ? m.is_owner : m.isOwner;
-        return '<div class="member-avatar" style="' + (isOwner ? 'background:var(--primary);' : '') + 'overflow:hidden;">' + avatarHtml + '</div>';
+        return '<div class="member-avatar" style="' + (m.is_owner ? 'background:var(--primary);' : '') + 'overflow:hidden;">' + avatarHtml + '</div>';
       }).join('');
       var memberNames = members.map(function(m) {
-        var isMe = typeof m.uid !== 'undefined' && m.uid === syncUid;
-        return isMe ? '我' : (m.name || '?');
+        return m.uid === syncUid ? '我' : (m.name || '对方');
       }).join('、');
       var daysText = days === 0 ? '就是今天🎉' : (days !== null ? '还有' + days + '天' : '已过');
       html += '<div class="shared-card" data-id="' + event.id + '"><div class="shared-card-header"><div class="shared-card-icon">' + info.icon + '</div><div class="shared-card-title">' + event.title + '</div><div class="shared-card-code">' + event.inviteCode + '</div></div><div class="shared-card-meta">' + info.label + ' · ' + formatDate(event.date) + ' · ' + daysText + '</div>' + (event.note ? '<div class="shared-card-meta" style="margin-top:4px;color:var(--text-light)">' + event.note + '</div>' : '') + '<div class="shared-card-members">' + memberBadges + '<span>' + memberNames + '</span></div><button class="btn-secondary btn-block share-again-btn" data-id="' + event.id + '" style="margin-top:10px;font-size:13px;padding:8px;">📤 再次分享链接</button></div>';
@@ -1665,8 +1673,8 @@ function renderSharedPage() {
       openEventModal(el.dataset.id);
     });
   });
-  // 进入共享页时异步刷新成员资料（由 syncLoadMembers 内部在数据变化后自动重绘，避免递归）
-  if (syncRoomId) syncLoadMembers();
+  // 不在这里调 syncLoadMembers，避免渲染链导致多次刷新
+  // 成员资料在 syncInit 和手动刷新同步时拉取
 }
 
 function buildSyncSection() {
