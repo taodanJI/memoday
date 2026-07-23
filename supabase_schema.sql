@@ -95,10 +95,25 @@ begin
 end;
 $$;
 
+-- 用户资料表（头像 + 昵称）
+create table if not exists profiles (
+  uid uuid primary key references auth.users(id) on delete cascade,
+  name text not null default '我',
+  avatar_type text not null default 'emoji',
+  avatar_data text not null default '😊',
+  updated_at timestamptz default now()
+);
+
+-- profiles 自动更新 updated_at
+drop trigger if exists profiles_updated_at on profiles;
+create trigger profiles_updated_at before update on profiles
+for each row execute function update_updated_at();
+
 -- ===== 行级安全策略 (RLS) =====
 alter table rooms enable row level security;
 alter table room_members enable row level security;
 alter table events enable row level security;
+alter table profiles enable row level security;
 
 -- 房间：创建者可读 + 同房间成员可读
 drop policy if exists "read rooms" on rooms;
@@ -143,6 +158,40 @@ drop policy if exists "delete events" on events;
 create policy "delete events" on events for delete to authenticated using (
   room_id in (select get_user_rooms())
 );
+
+-- 资料：用户只能读写自己的资料
+drop policy if exists "read own profile" on profiles;
+create policy "read own profile" on profiles for select to authenticated using (uid = auth.uid());
+
+drop policy if exists "insert own profile" on profiles;
+create policy "insert own profile" on profiles for insert to authenticated with check (uid = auth.uid());
+
+drop policy if exists "update own profile" on profiles;
+create policy "update own profile" on profiles for update to authenticated using (uid = auth.uid());
+
+-- 通过配对码查房间成员昵称头像（绕过 RLS，用于展示对方资料）
+create or replace function get_room_profiles(target_room_id uuid)
+returns json
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  result json;
+begin
+  select coalesce(json_agg(json_build_object(
+    'uid', rm.uid,
+    'name', rm.name,
+    'avatar_type', coalesce(p.avatar_type, 'emoji'),
+    'avatar_data', coalesce(p.avatar_data, '😊'),
+    'is_owner', rm.is_owner
+  )), '[]'::json) into result
+  from room_members rm
+  left join profiles p on p.uid = rm.uid
+  where rm.room_id = target_room_id;
+  return result;
+end;
+$$;
 
 -- 开启 Realtime（实时推送）
 alter publication supabase_realtime add table events;

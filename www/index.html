@@ -429,6 +429,33 @@ html, body {
     </div>
   </div>
 
+  <div class="modal-overlay" id="profileModal">
+    <div class="modal-sheet" style="max-width:380px;border-radius:24px;">
+      <div class="sheet-handle"></div>
+      <div class="modal-body" style="padding:20px 24px 24px;">
+        <h3 style="font-size:18px;text-align:center;margin-bottom:16px;">编辑资料</h3>
+        <div id="profileAvatarPreview" style="width:72px;height:72px;border-radius:50%;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:40px;background:var(--bg-card);overflow:hidden;border:2px solid var(--border);">😊</div>
+        <div style="margin-bottom:16px;">
+          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:6px;">昵称</label>
+          <input type="text" id="profileNameInput" maxlength="20" placeholder="输入昵称" style="width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:12px;font-size:16px;background:var(--bg-card);box-sizing:border-box;" />
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:8px;">选择头像</label>
+          <div id="avatarGrid" style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px;"></div>
+        </div>
+        <div style="margin-bottom:20px;">
+          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:8px;">或上传自定义头像</label>
+          <button id="btnUploadAvatar" style="width:100%;padding:12px;border:1.5px dashed var(--border);border-radius:12px;background:var(--bg-card);font-size:14px;color:var(--text-secondary);cursor:pointer;">📷 从相册选择</button>
+          <input type="file" id="avatarFileInput" accept="image/*" style="display:none;" />
+        </div>
+        <div class="form-actions" style="margin-top:0;">
+          <button class="btn-secondary" id="btnProfileCancel">取消</button>
+          <button class="btn-primary" id="btnProfileSave">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script>
@@ -495,8 +522,16 @@ function updateSharedEvent(id, updates) {
   return null;
 }
 
-function getProfile() { return loadData(STORAGE_KEYS.profile) || { name: '我', avatar: '😊' }; }
+function getProfile() { return loadData(STORAGE_KEYS.profile) || { name: '我', avatar: '😊', avatarType: 'emoji', avatarData: '😊' }; }
 function saveProfile(profile) { saveData(STORAGE_KEYS.profile, profile); }
+function getProfileAvatarHtml(size) {
+  var p = getProfile();
+  size = size || 56;
+  if (p.avatarType === 'upload' && p.avatarData) {
+    return '<img src="' + p.avatarData + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;" />';
+  }
+  return '<span style="font-size:' + Math.round(size * 0.7) + 'px;">' + (p.avatarData || p.avatar || '😊') + '</span>';
+}
 function getSettings() { return loadData(STORAGE_KEYS.settings) || { notifications: true, sound: true, defaultReminder: [0, 1] }; }
 function saveSettings(settings) { saveData(STORAGE_KEYS.settings, settings); }
 
@@ -582,6 +617,8 @@ async function syncInit() {
     await syncLoadMembers();
     syncStartPolling();
   }
+  // 加载云端资料
+  syncLoadProfile();
 }
 
 async function syncVerifyToken() {
@@ -824,6 +861,151 @@ function syncGetStatus() {
     partnerName: syncPartnerName,
     isOwner: getSyncData().pairCode ? true : false
   };
+}
+
+// ========== 资料同步 ==========
+async function syncSaveProfile() {
+  if (!syncToken || !syncUid) return;
+  var profile = getProfile();
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/profiles?uid=eq.' + syncUid, {
+      method: 'POST',
+      headers: Object.assign({}, syncHeaders(), { 'Prefer': 'resolution=merge-duplicates' }),
+      body: JSON.stringify({
+        uid: syncUid,
+        name: profile.name || '我',
+        avatar_type: profile.avatarType || 'emoji',
+        avatar_data: profile.avatarData || profile.avatar || '😊'
+      })
+    });
+  } catch(e) { console.log('[Sync] save profile failed', e); }
+}
+
+async function syncLoadProfile() {
+  if (!syncToken || !syncUid) return;
+  try {
+    var res = await fetch(SUPABASE_URL + '/rest/v1/profiles?uid=eq.' + syncUid, {
+      headers: syncHeaders()
+    });
+    if (res.ok) {
+      var rows = await res.json();
+      if (rows.length > 0) {
+        var row = rows[0];
+        var profile = getProfile();
+        profile.name = row.name || profile.name;
+        profile.avatarType = row.avatar_type || 'emoji';
+        profile.avatarData = row.avatar_data || '😊';
+        profile.avatar = profile.avatarData;
+        saveProfile(profile);
+      } else {
+        // 没有资料记录，创建一份
+        syncSaveProfile();
+      }
+    }
+  } catch(e) { console.log('[Sync] load profile failed', e); }
+}
+
+// ========== 资料编辑弹窗 ==========
+var PRESET_AVATARS = ['😊','🥰','😎','🤗','😴','🤔','🥳','😍','🐱','🐶','🦊','🐼','🐨','🐰','🐯','🦁','🐸','🐵','🦄','🐲','🌸','🌺','🌻','🍀','🌈','⭐','🌙','☀️','🎈','🎉','💝','💖'];
+var tempProfileData = { name: '', avatarType: 'emoji', avatarData: '😊' };
+
+function openProfileModal() {
+  var profile = getProfile();
+  tempProfileData = { name: profile.name, avatarType: profile.avatarType || 'emoji', avatarData: profile.avatarData || profile.avatar || '😊' };
+  var modal = document.getElementById('profileModal');
+  var nameInput = document.getElementById('profileNameInput');
+  var preview = document.getElementById('profileAvatarPreview');
+  nameInput.value = profile.name;
+  updateAvatarPreview();
+  // 构建预设头像网格
+  var grid = document.getElementById('avatarGrid');
+  grid.innerHTML = '';
+  PRESET_AVATARS.forEach(function(emoji) {
+    var item = document.createElement('div');
+    item.style.cssText = 'width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;border:2px solid transparent;transition:border-color 0.2s;';
+    item.textContent = emoji;
+    item.addEventListener('click', function() {
+      tempProfileData.avatarType = 'emoji';
+      tempProfileData.avatarData = emoji;
+      updateAvatarPreview();
+      // 高亮选中
+      grid.querySelectorAll('div').forEach(function(d) { d.style.borderColor = 'transparent'; });
+      item.style.borderColor = 'var(--primary)';
+    });
+    if (tempProfileData.avatarType === 'emoji' && tempProfileData.avatarData === emoji) {
+      item.style.borderColor = 'var(--primary)';
+    }
+    grid.appendChild(item);
+  });
+  modal.classList.add('show');
+  setTimeout(function() { nameInput.focus(); }, 300);
+  bindProfileModalEvents();
+}
+
+function updateAvatarPreview() {
+  var preview = document.getElementById('profileAvatarPreview');
+  if (tempProfileData.avatarType === 'upload' && tempProfileData.avatarData) {
+    preview.innerHTML = '<img src="' + tempProfileData.avatarData + '" style="width:100%;height:100%;object-fit:cover;" />';
+  } else {
+    preview.innerHTML = '<span style="font-size:40px;">' + (tempProfileData.avatarData || '😊') + '</span>';
+  }
+}
+
+function bindProfileModalEvents() {
+  var modal = document.getElementById('profileModal');
+  // 防止重复绑定
+  if (modal.dataset.bound === 'true') return;
+  modal.dataset.bound = 'true';
+  document.getElementById('btnProfileCancel').addEventListener('click', function() { modal.classList.remove('show'); });
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.classList.remove('show'); });
+  document.getElementById('profileNameInput').addEventListener('input', function(e) { tempProfileData.name = e.target.value; });
+  // 上传头像
+  document.getElementById('btnUploadAvatar').addEventListener('click', function() { document.getElementById('avatarFileInput').click(); });
+  document.getElementById('avatarFileInput').addEventListener('change', function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showToast('图片不能超过5MB'); return; }
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      // 压缩到 128x128
+      var img = new Image();
+      img.onload = function() {
+        var canvas = document.createElement('canvas');
+        canvas.width = 128; canvas.height = 128;
+        var ctx = canvas.getContext('2d');
+        // 居中裁剪
+        var minDim = Math.min(img.width, img.height);
+        var sx = (img.width - minDim) / 2;
+        var sy = (img.height - minDim) / 2;
+        ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, 128, 128);
+        var base64 = canvas.toDataURL('image/jpeg', 0.85);
+        tempProfileData.avatarType = 'upload';
+        tempProfileData.avatarData = base64;
+        updateAvatarPreview();
+        // 取消预设选中高亮
+        document.getElementById('avatarGrid').querySelectorAll('div').forEach(function(d) { d.style.borderColor = 'transparent'; });
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = ''; // 重置以便重复选择同一文件
+  });
+  // 保存
+  document.getElementById('btnProfileSave').addEventListener('click', function() {
+    var name = tempProfileData.name.trim();
+    if (!name) { showToast('请输入昵称'); return; }
+    var profile = getProfile();
+    profile.name = name;
+    profile.avatarType = tempProfileData.avatarType;
+    profile.avatarData = tempProfileData.avatarData;
+    profile.avatar = tempProfileData.avatarData;
+    saveProfile(profile);
+    modal.classList.remove('show');
+    showToast('已保存');
+    renderSettingsPage();
+    // 同步到云端
+    syncSaveProfile();
+  });
 }
 
 // ========== 日期工具 ==========
@@ -1549,7 +1731,7 @@ function renderSettingsPage() {
   var profile = getProfile(), settings = getSettings(), notifStatus = getNotificationStatus();
   var totalEvents = getAllEvents().length;
   var notifText = { granted: '已开启', denied: '已拒绝', unsupported: '不支持', default: '未开启' }[notifStatus] || '未开启';
-  container.innerHTML = '<div class="page active"><div class="hero-card" style="text-align:center;padding:28px 20px;"><div style="font-size:56px;margin-bottom:8px;">' + profile.avatar + '</div><div class="hero-title" style="font-size:22px;">' + profile.name + '</div><div class="hero-subtitle">已记录 ' + totalEvents + ' 个重要日子</div></div><div class="settings-group"><div class="settings-item" id="settingNotif"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">🔔</div><div class="settings-label">通知提醒</div><div class="settings-value">' + notifText + '</div><div class="toggle ' + (settings.notifications ? 'on' : '') + '"></div></div><div class="settings-item" id="settingSound"><div class="settings-icon" style="background:rgba(245,158,11,0.1)">🔊</div><div class="settings-label">提醒声音</div><div class="toggle ' + (settings.sound ? 'on' : '') + '"></div></div><div class="settings-item" id="settingTest"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📋</div><div class="settings-label">发送测试通知</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item" id="settingName"><div class="settings-icon" style="background:rgba(59,130,246,0.1)">👤</div><div class="settings-label">我的昵称</div><div class="settings-value">' + profile.name + '</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingAvatar"><div class="settings-icon" style="background:rgba(255,107,157,0.1)">😊</div><div class="settings-label">我的头像</div><div class="settings-value">' + profile.avatar + '</div><div class="settings-arrow">›</div></div></div>' + buildSyncSection() + '<div class="settings-group"><div class="settings-item" id="settingInstall" style="cursor:pointer;"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📱</div><div class="settings-label">安装到手机桌面</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingExport"><div class="settings-icon" style="background:rgba(168,85,247,0.1)">📤</div><div class="settings-label">导出数据</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingClear"><div class="settings-icon" style="background:rgba(239,68,68,0.1)">🗑️</div><div class="settings-label" style="color:var(--danger)">清空所有数据</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">📱</div><div class="settings-label">版本</div><div class="settings-value">v1.1.0</div></div><div class="settings-item"><div class="settings-icon" style="background:rgba(244,63,94,0.1)">💝</div><div class="settings-label">念念日历</div><div class="settings-value">念念不忘的日子</div></div></div></div>';
+  container.innerHTML = '<div class="page active"><div class="hero-card" style="text-align:center;padding:28px 20px;"><div style="width:80px;height:80px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;border-radius:50%;overflow:hidden;">' + getProfileAvatarHtml(80) + '</div><div class="hero-title" style="font-size:22px;">' + profile.name + '</div><div class="hero-subtitle">已记录 ' + totalEvents + ' 个重要日子</div></div><div class="settings-group"><div class="settings-item" id="settingNotif"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">🔔</div><div class="settings-label">通知提醒</div><div class="settings-value">' + notifText + '</div><div class="toggle ' + (settings.notifications ? 'on' : '') + '"></div></div><div class="settings-item" id="settingSound"><div class="settings-icon" style="background:rgba(245,158,11,0.1)">🔊</div><div class="settings-label">提醒声音</div><div class="toggle ' + (settings.sound ? 'on' : '') + '"></div></div><div class="settings-item" id="settingTest"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📋</div><div class="settings-label">发送测试通知</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item" id="settingProfile"><div class="settings-icon" style="background:rgba(59,130,246,0.1)">👤</div><div class="settings-label">编辑资料</div><div class="settings-value">' + profile.name + '</div><div class="settings-arrow">›</div></div></div>' + buildSyncSection() + '<div class="settings-group"><div class="settings-item" id="settingInstall" style="cursor:pointer;"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📱</div><div class="settings-label">安装到手机桌面</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingExport"><div class="settings-icon" style="background:rgba(168,85,247,0.1)">📤</div><div class="settings-label">导出数据</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingClear"><div class="settings-icon" style="background:rgba(239,68,68,0.1)">🗑️</div><div class="settings-label" style="color:var(--danger)">清空所有数据</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">📱</div><div class="settings-label">版本</div><div class="settings-value">v1.1.0</div></div><div class="settings-item"><div class="settings-icon" style="background:rgba(244,63,94,0.1)">💝</div><div class="settings-label">念念日历</div><div class="settings-value">念念不忘的日子</div></div></div></div>';
   bindSettingsEvents(settings, profile);
   bindSyncEvents();
 }
@@ -1569,13 +1751,8 @@ function bindSettingsEvents(settings, profile) {
     if (getNotificationStatus() !== 'granted') { showToast('请先开启通知权限'); return; }
     sendTestNotification(); showToast('测试通知已发送');
   });
-  document.getElementById('settingName').addEventListener('click', function() {
-    var name = prompt('输入你的昵称', profile.name);
-    if (name && name.trim()) { profile.name = name.trim(); saveProfile(profile); showToast('已保存'); renderSettingsPage(); }
-  });
-  document.getElementById('settingAvatar').addEventListener('click', function() {
-    var input = prompt('输入一个 emoji 作为头像', profile.avatar);
-    if (input && input.trim()) { profile.avatar = input.trim().charAt(0); saveProfile(profile); showToast('已保存'); renderSettingsPage(); }
+  document.getElementById('settingProfile').addEventListener('click', function() {
+    openProfileModal();
   });
   document.getElementById('settingInstall').addEventListener('click', function() { showToast('请通过浏览器分享菜单添加到主屏幕'); });
   document.getElementById('settingExport').addEventListener('click', function() {
