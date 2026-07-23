@@ -181,7 +181,7 @@ declare
 begin
   select coalesce(json_agg(json_build_object(
     'uid', rm.uid,
-    'name', rm.name,
+    'name', coalesce(p.name, rm.name),
     'avatar_type', coalesce(p.avatar_type, 'emoji'),
     'avatar_data', coalesce(p.avatar_data, '😊'),
     'is_owner', rm.is_owner

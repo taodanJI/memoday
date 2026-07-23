@@ -528,7 +528,7 @@ function getProfileAvatarHtml(size) {
   var p = getProfile();
   size = size || 56;
   if (p.avatarType === 'upload' && p.avatarData) {
-    return '<img src="' + p.avatarData + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;" />';
+    return '<img src="' + p.avatarData + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;object-position:center center;display:block;" />';
   }
   return '<span style="font-size:' + Math.round(size * 0.7) + 'px;">' + (p.avatarData || p.avatar || '😊') + '</span>';
 }
@@ -592,6 +592,7 @@ var SYNC_KEY = 'memoday_sync';
 var syncToken = null, syncUid = null, syncRoomId = null, syncEnabled = false;
 var syncPairCode = '', syncPartnerName = '';
 var syncPollTimer = null;
+var syncRoomMembers = [];
 
 function getSyncData() { return loadData(SYNC_KEY) || {}; }
 function saveSyncData(data) { saveData(SYNC_KEY, data); }
@@ -759,11 +760,14 @@ async function syncAddMember(roomId, name, isOwner) {
 async function syncLoadMembers() {
   if (!syncRoomId) return;
   try {
-    var res = await fetch(SUPABASE_URL + '/rest/v1/room_members?room_id=eq.' + syncRoomId, {
-      headers: syncHeaders()
+    var res = await fetch(SUPABASE_URL + '/rest/v1/rpc/get_room_profiles', {
+      method: 'POST',
+      headers: syncHeaders(),
+      body: JSON.stringify({ target_room_id: syncRoomId })
     });
     if (res.ok) {
-      var members = await res.json();
+      var members = await res.json() || [];
+      syncRoomMembers = members;
       var other = members.find(function(m) { return m.uid !== syncUid; });
       syncPartnerName = other ? other.name : '';
       var d = getSyncData(); d.partnerName = syncPartnerName; saveSyncData(d);
@@ -878,6 +882,14 @@ async function syncSaveProfile() {
         avatar_data: profile.avatarData || profile.avatar || '😊'
       })
     });
+    // 同步更新 room_members 里的名字
+    if (syncRoomId) {
+      await fetch(SUPABASE_URL + '/rest/v1/room_members?room_id=eq.' + syncRoomId + '&uid=eq.' + syncUid, {
+        method: 'PATCH',
+        headers: syncHeaders(),
+        body: JSON.stringify({ name: profile.name || '我' })
+      });
+    }
   } catch(e) { console.log('[Sync] save profile failed', e); }
 }
 
@@ -945,7 +957,7 @@ function openProfileModal() {
 function updateAvatarPreview() {
   var preview = document.getElementById('profileAvatarPreview');
   if (tempProfileData.avatarType === 'upload' && tempProfileData.avatarData) {
-    preview.innerHTML = '<img src="' + tempProfileData.avatarData + '" style="width:100%;height:100%;object-fit:cover;" />';
+    preview.innerHTML = '<img src="' + tempProfileData.avatarData + '" style="width:100%;height:100%;object-fit:cover;object-position:center center;display:block;" />';
   } else {
     preview.innerHTML = '<span style="font-size:40px;">' + (tempProfileData.avatarData || '😊') + '</span>';
   }
@@ -1600,13 +1612,32 @@ function renderSharedPage() {
   if (sharedEvents.length === 0) {
     html += '<div class="empty-state"><div class="empty-icon">💌</div><div class="empty-text">还没有共享纪念日</div><div class="empty-text" style="margin-top:8px;font-size:12px">点击右上角 + 创建</div></div>';
   } else {
+    // 优先用云端成员资料
+    var members = (syncRoomMembers && syncRoomMembers.length > 0) ? syncRoomMembers : [];
+    if (members.length === 0) {
+      // 回退到本地 event.members
+      var firstEvent = sharedEvents[0];
+      members = (firstEvent && firstEvent.members) ? firstEvent.members : [];
+    }
     html += '<div class="section-title">共享列表 · ' + sharedEvents.length + '</div>';
     for (var i = 0; i < sharedEvents.length; i++) {
       var event = sharedEvents[i], info = getEventTypeInfo(event.type), days = daysUntilNext(event);
-      var members = event.members || [];
-      var memberBadges = members.map(function(m) { return '<div class="member-avatar" style="' + (m.isOwner ? 'background:var(--primary);' : '') + '">' + (m.name || '?').charAt(0) + '</div>'; }).join('');
+      var memberBadges = members.map(function(m) {
+        var isMe = m.uid === syncUid;
+        var displayName = isMe ? '我' : (m.name || '?');
+        var avatarHtml;
+        if (m.avatar_type === 'upload' && m.avatar_data) {
+          avatarHtml = '<img src="' + m.avatar_data + '" style="width:100%;height:100%;object-fit:cover;object-position:center center;display:block;border-radius:50%;" />';
+        } else {
+          avatarHtml = '<span style="font-size:11px;font-weight:600;">' + (displayName).charAt(0) + '</span>';
+        }
+        return '<div class="member-avatar" style="' + (m.is_owner ? 'background:var(--primary);' : '') + 'overflow:hidden;">' + avatarHtml + '</div>';
+      }).join('');
+      var memberNames = members.map(function(m) {
+        return m.uid === syncUid ? '我' : (m.name || '?');
+      }).join('、');
       var daysText = days === 0 ? '就是今天🎉' : (days !== null ? '还有' + days + '天' : '已过');
-      html += '<div class="shared-card" data-id="' + event.id + '"><div class="shared-card-header"><div class="shared-card-icon">' + info.icon + '</div><div class="shared-card-title">' + event.title + '</div><div class="shared-card-code">' + event.inviteCode + '</div></div><div class="shared-card-meta">' + info.label + ' · ' + formatDate(event.date) + ' · ' + daysText + '</div>' + (event.note ? '<div class="shared-card-meta" style="margin-top:4px;color:var(--text-light)">' + event.note + '</div>' : '') + '<div class="shared-card-members">' + memberBadges + '<span>' + members.map(function(m) { return m.name; }).join('、') + '</span></div><button class="btn-secondary btn-block share-again-btn" data-id="' + event.id + '" style="margin-top:10px;font-size:13px;padding:8px;">📤 再次分享链接</button></div>';
+      html += '<div class="shared-card" data-id="' + event.id + '"><div class="shared-card-header"><div class="shared-card-icon">' + info.icon + '</div><div class="shared-card-title">' + event.title + '</div><div class="shared-card-code">' + event.inviteCode + '</div></div><div class="shared-card-meta">' + info.label + ' · ' + formatDate(event.date) + ' · ' + daysText + '</div>' + (event.note ? '<div class="shared-card-meta" style="margin-top:4px;color:var(--text-light)">' + event.note + '</div>' : '') + '<div class="shared-card-members">' + memberBadges + '<span>' + memberNames + '</span></div><button class="btn-secondary btn-block share-again-btn" data-id="' + event.id + '" style="margin-top:10px;font-size:13px;padding:8px;">📤 再次分享链接</button></div>';
     }
   }
   html += '</div>';
@@ -1622,6 +1653,8 @@ function renderSharedPage() {
       openEventModal(el.dataset.id);
     });
   });
+  // 进入共享页时异步刷新成员资料
+  if (syncRoomId) syncLoadMembers().then(function() { renderSharedPage(); });
 }
 
 function buildSyncSection() {
@@ -1731,7 +1764,7 @@ function renderSettingsPage() {
   var profile = getProfile(), settings = getSettings(), notifStatus = getNotificationStatus();
   var totalEvents = getAllEvents().length;
   var notifText = { granted: '已开启', denied: '已拒绝', unsupported: '不支持', default: '未开启' }[notifStatus] || '未开启';
-  container.innerHTML = '<div class="page active"><div class="hero-card" style="text-align:center;padding:28px 20px;"><div style="width:80px;height:80px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;border-radius:50%;overflow:hidden;">' + getProfileAvatarHtml(80) + '</div><div class="hero-title" style="font-size:22px;">' + profile.name + '</div><div class="hero-subtitle">已记录 ' + totalEvents + ' 个重要日子</div></div><div class="settings-group"><div class="settings-item" id="settingNotif"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">🔔</div><div class="settings-label">通知提醒</div><div class="settings-value">' + notifText + '</div><div class="toggle ' + (settings.notifications ? 'on' : '') + '"></div></div><div class="settings-item" id="settingSound"><div class="settings-icon" style="background:rgba(245,158,11,0.1)">🔊</div><div class="settings-label">提醒声音</div><div class="toggle ' + (settings.sound ? 'on' : '') + '"></div></div><div class="settings-item" id="settingTest"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📋</div><div class="settings-label">发送测试通知</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item" id="settingProfile"><div class="settings-icon" style="background:rgba(59,130,246,0.1)">👤</div><div class="settings-label">编辑资料</div><div class="settings-value">' + profile.name + '</div><div class="settings-arrow">›</div></div></div>' + buildSyncSection() + '<div class="settings-group"><div class="settings-item" id="settingInstall" style="cursor:pointer;"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📱</div><div class="settings-label">安装到手机桌面</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingExport"><div class="settings-icon" style="background:rgba(168,85,247,0.1)">📤</div><div class="settings-label">导出数据</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingClear"><div class="settings-icon" style="background:rgba(239,68,68,0.1)">🗑️</div><div class="settings-label" style="color:var(--danger)">清空所有数据</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">📱</div><div class="settings-label">版本</div><div class="settings-value">v1.1.0</div></div><div class="settings-item"><div class="settings-icon" style="background:rgba(244,63,94,0.1)">💝</div><div class="settings-label">念念日历</div><div class="settings-value">念念不忘的日子</div></div></div></div>';
+  container.innerHTML = '<div class="page active"><div class="hero-card" style="text-align:center;padding:28px 20px;"><div style="width:80px;height:80px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;border-radius:50%;overflow:hidden;position:relative;">' + getProfileAvatarHtml(80) + '</div><div class="hero-title" style="font-size:22px;">' + profile.name + '</div><div class="hero-subtitle">已记录 ' + totalEvents + ' 个重要日子</div></div><div class="settings-group"><div class="settings-item" id="settingNotif"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">🔔</div><div class="settings-label">通知提醒</div><div class="settings-value">' + notifText + '</div><div class="toggle ' + (settings.notifications ? 'on' : '') + '"></div></div><div class="settings-item" id="settingSound"><div class="settings-icon" style="background:rgba(245,158,11,0.1)">🔊</div><div class="settings-label">提醒声音</div><div class="toggle ' + (settings.sound ? 'on' : '') + '"></div></div><div class="settings-item" id="settingTest"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📋</div><div class="settings-label">发送测试通知</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item" id="settingProfile"><div class="settings-icon" style="background:rgba(59,130,246,0.1)">👤</div><div class="settings-label">编辑资料</div><div class="settings-value">' + profile.name + '</div><div class="settings-arrow">›</div></div></div>' + buildSyncSection() + '<div class="settings-group"><div class="settings-item" id="settingInstall" style="cursor:pointer;"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">📱</div><div class="settings-label">安装到手机桌面</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingExport"><div class="settings-icon" style="background:rgba(168,85,247,0.1)">📤</div><div class="settings-label">导出数据</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingClear"><div class="settings-icon" style="background:rgba(239,68,68,0.1)">🗑️</div><div class="settings-label" style="color:var(--danger)">清空所有数据</div><div class="settings-arrow">›</div></div></div><div class="settings-group"><div class="settings-item"><div class="settings-icon" style="background:rgba(124,58,237,0.1)">📱</div><div class="settings-label">版本</div><div class="settings-value">v1.1.0</div></div><div class="settings-item"><div class="settings-icon" style="background:rgba(244,63,94,0.1)">💝</div><div class="settings-label">念念日历</div><div class="settings-value">念念不忘的日子</div></div></div></div>';
   bindSettingsEvents(settings, profile);
   bindSyncEvents();
 }
