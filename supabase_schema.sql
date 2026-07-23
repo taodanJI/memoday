@@ -43,6 +43,24 @@ drop trigger if exists events_updated_at on events;
 create trigger events_updated_at before update on events
 for each row execute function update_updated_at();
 
+-- 通过邀请码查找事件（绕过 RLS，非成员也可通过邀请码加入）
+create or replace function get_event_by_invite_code(code text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  event_data jsonb;
+begin
+  select data into event_data from events where data->>'inviteCode' = code limit 1;
+  if event_data is null then
+    raise exception '邀请码无效';
+  end if;
+  return event_data;
+end;
+$$;
+
 -- 通过配对码加入房间（绕过 RLS，非成员无法查询 rooms 表）
 create or replace function join_room_by_code(target_pair_code text, user_name text)
 returns uuid
