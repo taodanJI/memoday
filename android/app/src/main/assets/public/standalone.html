@@ -358,7 +358,13 @@ html, body {
           <button class="btn-primary btn-block" id="btnCreateShared">+ 创建共享纪念日</button>
         </div>
         <div class="share-divider"><span>好友邀请你加入？</span></div>
-        <div class="share-section"><p class="share-desc" style="text-align:center">请让好友把分享链接发给你<br>直接点击链接即可自动加入</p></div>
+        <div class="share-section">
+          <p class="share-desc" style="text-align:center;margin-bottom:12px;">输入好友给你的邀请码即可加入</p>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="joinCodeInput" placeholder="输入6位邀请码" maxlength="6" style="flex:1;padding:10px 14px;border:1.5px solid var(--border);border-radius:12px;font-size:16px;text-transform:uppercase;letter-spacing:2px;text-align:center;background:var(--bg-input);color:var(--text-primary);" />
+            <button class="btn-primary" id="btnJoinByCode" style="white-space:nowrap;padding:10px 20px;">加入</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1697,6 +1703,49 @@ function bindShareModal() {
   document.getElementById('shareModalClose').addEventListener('click', function() { modal.classList.remove('show'); });
   modal.addEventListener('click', function(e) { if (e.target === modal) modal.classList.remove('show'); });
   document.getElementById('btnCreateShared').addEventListener('click', function() { modal.classList.remove('show'); openSharedEventModal(); });
+  var codeInput = document.getElementById('joinCodeInput');
+  if (codeInput) {
+    codeInput.addEventListener('input', function() {
+      this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    });
+    codeInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btnJoinByCode').click(); }
+    });
+  }
+  var joinBtn = document.getElementById('btnJoinByCode');
+  if (joinBtn) {
+    joinBtn.addEventListener('click', async function() {
+      var code = codeInput.value.trim();
+      if (!code || code.length < 6) { showToast('请输入6位邀请码'); return; }
+      var shared = getSharedEvents();
+      if (shared.some(function(e) { return e.inviteCode === code; })) { showToast('你已经加入过这个纪念日了'); return; }
+      joinBtn.textContent = '查找中...';
+      joinBtn.disabled = true;
+      try {
+        if (!syncToken) await syncAnonymousLogin();
+        var res = await fetch(SUPABASE_URL + '/rest/v1/rpc/get_event_by_invite_code', {
+          method: 'POST',
+          headers: Object.assign({}, syncHeaders(), { 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ code: code })
+        });
+        if (!res.ok) throw new Error('查询失败');
+        var eventData = await res.json();
+        if (!eventData) throw new Error('未找到');
+        var data = {
+          title: eventData.title, date: eventData.date, type: eventData.type || 'anniversary',
+          repeat: eventData.repeat || 'yearly', note: eventData.note || '', lunar: eventData.lunar || false,
+          reminders: eventData.reminders || [0, 1], owner: eventData.owner || '好友', inviteCode: code
+        };
+        modal.classList.remove('show');
+        codeInput.value = '';
+        showJoinModal(data);
+      } catch(e) {
+        showToast('邀请码无效或未找到事件');
+      }
+      joinBtn.textContent = '加入';
+      joinBtn.disabled = false;
+    });
+  }
 }
 function openShareModal() { document.getElementById('shareModal').classList.add('show'); }
 function openSharedEventModal() {
