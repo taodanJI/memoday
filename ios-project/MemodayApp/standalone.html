@@ -1442,7 +1442,7 @@ function buildSyncSection() {
     return '<div class="settings-group"><div class="settings-item" id="settingSyncHint"><div class="settings-icon" style="background:rgba(156,163,175,0.1)">☁️</div><div class="settings-label">云端同步</div><div class="settings-value">未配置</div></div></div>';
   }
   if (status.enabled) {
-    return '<div class="settings-group"><div class="settings-item" id="settingSyncStatus"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">☁️</div><div class="settings-label">云端同步</div><div class="settings-value">' + status.pairCode + '</div><div class="settings-arrow">›</div></div></div>';
+    return '<div class="settings-group"><div class="settings-item" id="settingSyncStatus"><div class="settings-icon" style="background:rgba(16,185,129,0.1)">☁️</div><div class="settings-label">云端同步</div><div class="settings-value">' + status.pairCode + '</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingSyncRefresh"><div class="settings-icon" style="background:rgba(59,130,246,0.1)">🔄</div><div class="settings-label">刷新同步</div><div class="settings-value sync-refresh-hint">点击拉取最新</div><div class="settings-arrow">›</div></div></div>';
   }
   return '<div class="settings-group"><div class="settings-item" id="settingSyncCreate"><div class="settings-icon" style="background:rgba(59,130,246,0.1)">☁️</div><div class="settings-label">创建配对房间</div><div class="settings-arrow">›</div></div><div class="settings-item" id="settingSyncJoin"><div class="settings-icon" style="background:rgba(168,85,247,0.1)">🔑</div><div class="settings-label">输入配对码加入</div><div class="settings-arrow">›</div></div></div>';
 }
@@ -1485,6 +1485,23 @@ function bindSyncEvents() {
           renderSettingsPage();
         });
       });
+    });
+  }
+  var refreshBtn = document.getElementById('settingSyncRefresh');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', async function() {
+      var hint = refreshBtn.querySelector('.sync-refresh-hint');
+      if (hint) hint.textContent = '同步中...';
+      showToast('正在同步...');
+      try {
+        await syncLoadEvents();
+        showToast('同步完成');
+        if (hint) hint.textContent = '点击拉取最新';
+        renderSettingsPage();
+      } catch(e) {
+        showToast('同步失败，请重试');
+        if (hint) hint.textContent = '点击拉取最新';
+      }
     });
   }
 }
